@@ -1,4 +1,4 @@
-# KeyPoints
+# KeyPoints 🖊️
 
 ## Idea
 
