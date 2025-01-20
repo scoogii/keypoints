@@ -1,0 +1,10 @@
+{
+  "manifest_version": 3,
+  "name": "KeyPoints",
+  "description": "Amazon review summariser with the help of an AI assistant",
+  "version": "1.0",
+  "permissions": [
+    "activeTab",
+    "scripting"
+  ]
+}
