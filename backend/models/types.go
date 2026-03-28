@@ -32,6 +32,7 @@ type AnalyzeResponse struct {
 	Cons               []ProCon            `json:"cons"`
 	SentimentScore     float64             `json:"sentimentScore"`
 	SentimentLabel     string              `json:"sentimentLabel"`
+	Summary            string              `json:"summary"`
 	FakeReviewFlags    []FakeReviewFlag    `json:"fakeReviewFlags"`
 	CategoryHighlights []CategoryHighlight `json:"categoryHighlights"`
 }

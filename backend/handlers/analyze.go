@@ -24,6 +24,43 @@ func getClientIP(r *http.Request) string {
 	return host
 }
 
+func RemainingHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	clientIP := getClientIP(r)
+	isPremium := false
+
+	if uid, err := middleware.GetUserFromRequest(r); err == nil {
+		if user, err := services.GetUserByID(uid); err == nil && user != nil {
+			isPremium = user.IsPremium
+		}
+	}
+
+	if isPremium {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{"remaining": -1})
+		return
+	}
+
+	count, err := services.GetAnalysisCountLast24h(clientIP)
+	if err != nil {
+		log.Printf("Error checking analysis count: %v", err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	remaining := 5 - count
+	if remaining < 0 {
+		remaining = 0
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{"remaining": remaining})
+}
+
 func AnalyzeHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)

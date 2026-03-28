@@ -1,6 +1,3 @@
-const API_BASE = 'http://localhost:8080';
-const GOOGLE_CLIENT_ID = '661661459372-vo69p37g9hodrhll0sr6skp7tgr92d4i.apps.googleusercontent.com';
-
 let currentReviews = [];
 let currentProductName = '';
 let currentProductDetails = {};
@@ -35,7 +32,7 @@ async function apiRequest(endpoint, options = {}) {
   const headers = { 'Content-Type': 'application/json', ...options.headers };
   if (kp_token) headers['Authorization'] = `Bearer ${kp_token}`;
 
-  const response = await fetch(`${API_BASE}${endpoint}`, {
+  const response = await fetch(`${CONFIG.API_BASE}${endpoint}`, {
     ...options,
     headers,
   });
@@ -133,6 +130,7 @@ function renderFakeReviews(flags) {
 
 function renderResults(data) {
   renderSentiment(data.sentimentScore, data.sentimentLabel);
+  document.getElementById('summary').textContent = data.summary || '';
   renderList('pros', data.pros);
   renderList('cons', data.cons);
   renderCategories(data.categoryHighlights);
@@ -488,6 +486,11 @@ async function runComparison() {
   const b = comparisons[selectedCompareIndices[1]];
   if (!a || !b) return;
 
+  if (a.asin && b.asin && a.asin === b.asin) {
+    showToast('You selected the same product twice. Pick two different products.', 'error');
+    return;
+  }
+
   const resultDiv = document.getElementById('compare-result');
   const colorA = a.sentimentScore >= 70 ? '#50bf68' : a.sentimentScore >= 40 ? '#f0ad4e' : '#d9534f';
   const colorB = b.sentimentScore >= 70 ? '#50bf68' : b.sentimentScore >= 40 ? '#f0ad4e' : '#d9534f';
@@ -496,6 +499,19 @@ async function runComparison() {
   const consA = (a.cons || []).map(c => `<li>⚠️ ${c.point}</li>`).join('');
   const prosB = (b.pros || []).map(p => `<li>✅ ${p.point}</li>`).join('');
   const consB = (b.cons || []).map(c => `<li>⚠️ ${c.point}</li>`).join('');
+
+  // Generate verdict
+  let verdict = '';
+  const diff = a.sentimentScore - b.sentimentScore;
+  const winner = diff > 0 ? a : b;
+  const loser = diff > 0 ? b : a;
+  if (Math.abs(diff) <= 5) {
+    verdict = `🤝 <strong>It's a toss-up!</strong> Both products have very similar sentiment scores. Choose based on which pros and cons matter most to you.`;
+  } else {
+    const winnerProsCount = (winner.pros || []).length;
+    const loserConsCount = (loser.cons || []).length;
+    verdict = `🏆 <strong>${winner.productName}</strong> comes out ahead with a ${winner.sentimentScore}% sentiment score vs ${loser.sentimentScore}%. It has ${winnerProsCount} highlighted pros compared to ${loserConsCount} flagged cons for the runner-up.`;
+  }
 
   resultDiv.innerHTML = `
     <div class="compare-result-grid">
@@ -517,6 +533,10 @@ async function runComparison() {
         <ul class="compare-result-list">${prosB}</ul>
         <ul class="compare-result-list">${consB}</ul>
       </div>
+    </div>
+    <div class="compare-verdict">
+      <h3>Final Verdict</h3>
+      <p>${verdict}</p>
     </div>
   `;
   resultDiv.style.display = 'block';
@@ -571,7 +591,7 @@ function updateAuthUI(user) {
 async function login() {
   const redirectUri = chrome.identity.getRedirectURL();
   const authUrl = new URL('https://accounts.google.com/o/oauth2/v2/auth');
-  authUrl.searchParams.set('client_id', GOOGLE_CLIENT_ID);
+  authUrl.searchParams.set('client_id', CONFIG.GOOGLE_CLIENT_ID);
   authUrl.searchParams.set('redirect_uri', redirectUri);
   authUrl.searchParams.set('response_type', 'token');
   authUrl.searchParams.set('scope', 'email profile');
@@ -588,7 +608,7 @@ async function login() {
 
     if (!accessToken) throw new Error('No access token received');
 
-    const response = await fetch(`${API_BASE}/api/auth/google`, {
+    const response = await fetch(`${CONFIG.API_BASE}/api/auth/google`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ googleToken: accessToken }),
@@ -734,6 +754,15 @@ document.addEventListener('DOMContentLoaded', async () => {
   } else {
     updateAuthUI(null);
   }
+
+  // Fetch remaining analyses for free tier
+  try {
+    const remainingRes = await apiRequest('/api/analyze/remaining');
+    if (remainingRes.ok) {
+      const { remaining } = await remainingRes.json();
+      updateRemainingBadge(remaining);
+    }
+  } catch {}
 
   // Update compare count badge
   updateCompareCount();

@@ -107,6 +107,7 @@ func buildAnalyzePrompt(reviews []models.Review, productName string) string {
   "cons": [{"point": "string"}],
   "sentimentScore": <number 0-100>,
   "sentimentLabel": "<Very Negative|Negative|Mixed|Positive|Very Positive>",
+  "summary": "string",
   "fakeReviewFlags": [{"reviewTitle": "string", "reason": "string", "confidence": <number 0-1>}],
   "categoryHighlights": [{"category": "string", "points": ["string"]}]
 }
@@ -116,6 +117,7 @@ Instructions:
 - "cons": Top 3-5 most mentioned negatives. Keep each point to one short sentence. ONLY include points explicitly stated in reviews.
 - "sentimentScore": Overall sentiment from 0 (very negative) to 100 (very positive) based on all reviews.
 - "sentimentLabel": One of "Very Negative" (0-20), "Negative" (21-40), "Mixed" (41-60), "Positive" (61-80), "Very Positive" (81-100).
+- "summary": A 1-3 sentence summary of the overall review consensus. Be clear and concise. ONLY state what reviewers actually said — do NOT invent or assume anything.
 - "fakeReviewFlags": Only flag reviews with HIGH confidence (>0.7) of being fake. Look for: generic/vague language, incentivized reviews, identical phrasing. Maximum 3 flags. If none are clearly suspicious, return an empty array. Do NOT flag reviews just for being short or having strong opinions.
 - "categoryHighlights": Maximum 3-4 categories. Each category should have 2-3 concise points maximum. Only include categories clearly discussed in reviews.
 - CRITICAL: Do NOT invent, assume, or hallucinate any information. Every point must be directly supported by the review text provided.

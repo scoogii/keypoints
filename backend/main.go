@@ -3,6 +3,7 @@ package main
 import (
 	"log"
 	"net/http"
+	"os"
 
 	"github.com/joho/godotenv"
 	"github.com/scoogii/keypoints-backend/handlers"
@@ -26,6 +27,7 @@ func main() {
 		w.Write([]byte(`{"status":"ok"}`))
 	})
 	mux.HandleFunc("/api/analyze", handlers.AnalyzeHandler)
+	mux.HandleFunc("/api/analyze/remaining", handlers.RemainingHandler)
 	mux.HandleFunc("/api/chat", handlers.ChatHandler)
 
 	mux.HandleFunc("/api/auth/google", handlers.GoogleAuthHandler)
@@ -38,6 +40,11 @@ func main() {
 	handler := middleware.CORS(mux)
 
 	log.Println("Sift backend starting on :8080")
+	if origin := os.Getenv("CORS_ALLOWED_ORIGIN"); origin != "" {
+		log.Printf("CORS: production mode, allowing origin: %s", origin)
+	} else {
+		log.Println("CORS: development mode, allowing chrome-extension:// and localhost")
+	}
 	if err := http.ListenAndServe(":8080", handler); err != nil {
 		log.Fatal(err)
 	}

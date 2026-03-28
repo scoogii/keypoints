@@ -4,7 +4,7 @@
 
 ## Overview
 
-Sift is a Chrome extension (Manifest V3) that uses AI to analyze Amazon product reviews. It provides free-tier analysis (pros/cons, sentiment, fake detection, category highlights) and premium features ($5/mo via Stripe) including AI chat, price history, product comparison, and export.
+Sift is a Chrome extension (Manifest V3) that uses AI to analyze Amazon product reviews. It provides free-tier analysis (pros/cons, sentiment, summary, fake detection, category highlights) and premium features ($5/mo via Stripe) including AI chat, price history, product comparison with verdict, and export.
 
 ## Tech Stack
 
@@ -18,15 +18,21 @@ Sift is a Chrome extension (Manifest V3) that uses AI to analyze Amazon product 
 ## Project Structure
 
 ```
-keypoints/
+sift/
 ├── manifest.json          # Extension manifest (Manifest V3)
 ├── popup.html             # Extension popup UI
 ├── popup.js               # Popup logic (auth, analysis, chat, compare, export)
 ├── popup.css              # Styling (dark/light theme, Apple-inspired)
+├── config.js              # Environment config (API_BASE, GOOGLE_CLIENT_ID)
 ├── content.js             # Content script (scrapes Amazon product pages)
+├── build.sh               # Production build script (creates dist/ with prod config)
 ├── AGENTS.md              # This file
 ├── README.md              # Project documentation
 ├── TODO.md                # Task tracking
+│
+├── dist/                  # Production build output (gitignored)
+│   ├── sift-extension.zip # Ready-to-upload Chrome Web Store zip
+│   └── ...                # Unpacked extension files with prod config
 │
 └── backend/
     ├── main.go            # HTTP server entry point (:8080)
@@ -45,17 +51,19 @@ keypoints/
     │   └── stripe.go      # Stripe checkout, portal, webhook handling
     │
     ├── handlers/
-    │   ├── analyze.go     # POST /api/analyze (free tier, rate limited)
+    │   ├── analyze.go     # POST /api/analyze, GET /api/analyze/remaining
     │   ├── auth.go        # POST /api/auth/google, GET /api/auth/me
     │   ├── chat.go        # POST /api/chat (premium only)
     │   └── stripe.go      # Stripe checkout, portal, webhook handlers
     │
     └── middleware/
-        ├── cors.go        # CORS middleware (chrome-extension://, localhost)
+        ├── cors.go        # CORS middleware (configurable via CORS_ALLOWED_ORIGIN)
         └── auth.go        # JWT extraction helper (GetUserFromRequest)
 ```
 
 ## Environment Variables
+
+### Backend (.env)
 
 | Variable | Description |
 |----------|-------------|
@@ -64,7 +72,15 @@ keypoints/
 | `STRIPE_SECRET_KEY` | Stripe secret key (sk_test_... or sk_live_...) |
 | `STRIPE_WEBHOOK_SECRET` | Stripe webhook signing secret (whsec_...) |
 | `STRIPE_PRICE_ID` | Stripe price ID for $5/mo plan (price_...) |
-| `JWT_SECRET` | Secret for signing/verifying JWTs (defaults to "keypoints-dev-secret" if unset) |
+| `JWT_SECRET` | Secret for signing/verifying JWTs (defaults to "sift-dev-secret" if unset) |
+| `CORS_ALLOWED_ORIGIN` | (Production only) Restrict CORS to a specific extension origin. If unset, dev mode allows chrome-extension:// and localhost |
+
+### Extension (config.js)
+
+| Constant | Dev Default | Production |
+|----------|-------------|------------|
+| `CONFIG.API_BASE` | `http://localhost:8080` | Your production API URL (HTTPS) |
+| `CONFIG.GOOGLE_CLIENT_ID` | Dev OAuth client ID | Production OAuth client ID |
 
 ## API Routes
 
@@ -72,6 +88,7 @@ keypoints/
 |--------|------|------|------|-------------|
 | GET | /api/health | No | — | Health check |
 | POST | /api/analyze | Optional | Free (5/day) | Analyze product reviews |
+| GET | /api/analyze/remaining | Optional | — | Get remaining free-tier analyses |
 | POST | /api/chat | JWT | Premium | Chat about product (full page context) |
 | POST | /api/auth/google | No | — | Exchange Google access token for JWT |
 | GET | /api/auth/me | JWT | — | Get current user info |
@@ -85,11 +102,14 @@ keypoints/
 1. User clicks "Analyze Reviews" in popup
 2. popup.js sends `scrapeReviews` message to content.js
 3. content.js scrapes reviews from DOM (`[data-hook="review"]` elements)
-4. popup.js sends reviews + productName to `POST /api/analyze`
-5. Backend checks rate limit (5/24h rolling window by IP for free users, unlimited for premium)
-6. Backend sends reviews to Gemini 2.5 Flash with structured JSON prompt (temperature 0.3)
-7. Gemini returns analysis (pros, cons, sentiment, fake flags, category highlights)
-8. Results rendered in popup, cached in `chrome.storage.local` (1hr expiry, keyed by ASIN)
+4. If no reviews found, shows error toast and does NOT count against rate limit
+5. popup.js sends reviews + productName to `POST /api/analyze`
+6. Backend checks rate limit (5/24h rolling window by IP for free users, unlimited for premium)
+7. Backend sends reviews to Gemini 2.5 Flash with structured JSON prompt (temperature 0.3)
+8. Gemini returns analysis (summary, pros, cons, sentiment, fake flags, category highlights)
+9. Analysis logged to `analysis_logs` only after successful Gemini response
+10. Results rendered in popup, cached in `chrome.storage.local` (1hr expiry, keyed by ASIN)
+11. Remaining analyses badge updated from response
 
 ### Auth Flow
 1. User clicks "Sign in with Google"
@@ -121,6 +141,13 @@ keypoints/
 8. Redirect back to the Amazon page user was on (success/cancel URLs both point to returnUrl)
 9. Cancellation: `customer.subscription.deleted` webhook → sets `is_premium = false`
 10. Payment failure: `invoice.payment_failed` webhook → sets `is_premium = false`
+
+### Compare Flow
+1. User saves products for comparison (max 5) from analysis results
+2. Selects 2 products in compare view (cards are clickable, white border on selection)
+3. Same-product comparison is blocked (checked by ASIN)
+4. Side-by-side comparison shows pros, cons, sentiment for each product
+5. **Final Verdict** section below shows winner (🏆) or toss-up (🤝) based on sentiment scores
 
 ### Data Caching Strategy
 - **Analysis results**: `chrome.storage.local`, keyed by `kp_cache_{ASIN}`, 1-hour expiry (3600000ms)
@@ -172,51 +199,75 @@ Two message actions:
 ## Premium Features (require login + active Stripe subscription)
 1. **AI Chat**: Ask questions about the full product page (grounded in provided data, anti-hallucination rules)
 2. **Price History**: CamelCamelCamel chart embedded via ASIN (supports US and AU domains)
-3. **Compare Mode**: Save up to 5 products, select 2 for side-by-side comparison (client-side only, no AI)
+3. **Compare Mode**: Save up to 5 products, select 2 for side-by-side comparison with final verdict
 4. **Export**: Copy to clipboard or download `.txt` report
 
 ## Free Tier Limits
 - 5 analyses per rolling 24-hour window (tracked by IP via `analysis_logs` table)
+- Only successful analyses count (failed/no-reviews attempts are not logged)
+- Remaining count shown via badge on popup load (fetched from `GET /api/analyze/remaining`)
 - Premium users: unlimited analyses (remaining count returns -1, badge hidden)
 
 ## UI Features
 - Dark/light theme toggle (persisted via `kp_theme`)
 - Haptic button feedback (`scale(0.97)` on `:active`)
-- Toast notifications (auto-dismiss after 3s, supports info/success/error types)
+- Toast notifications (auto-dismiss after 3s, supports info/success/error types, colored correctly in light mode)
 - Analysis caching (results persist per product when popup reopens)
 - Persistent chat (messages saved per product ASIN)
 - Typing indicator (animated dots) during chat responses
+- Sentiment summary (1-3 sentence AI-generated overview below sentiment bar)
 - Apple-inspired design (SF Pro font stack, 14px border-radius cards, gradient buttons)
+- 440px popup width
 
-## Development Setup
+## Development & Production
+
+### Development Setup
 
 ```bash
 # Prerequisites: Go 1.25+, PostgreSQL, Stripe CLI
 
 # Database
-createdb keypoints
+createdb sift
 
 # Backend
 cd backend
 # Create .env with required variables (DATABASE_URL, GEMINI_API_KEY, STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET, STRIPE_PRICE_ID, JWT_SECRET)
+# Do NOT set CORS_ALLOWED_ORIGIN in dev (enables dev mode CORS)
 ./dev.sh              # Starts Go server + Stripe webhook listener
 
 # Extension
 # chrome://extensions → Developer mode → Load unpacked → select project root
+# config.js has dev defaults (localhost:8080)
 ```
+
+### Production Build
+
+```bash
+# Build extension zip with production config
+./build.sh --api https://your-api.com --client-id YOUR_PROD_GOOGLE_CLIENT_ID
+
+# Output: dist/sift-extension.zip (upload to Chrome Web Store)
+# Or use env vars: PROD_API_BASE and PROD_GOOGLE_CLIENT_ID
+```
+
+### Production Backend Checklist
+- Set `CORS_ALLOWED_ORIGIN=chrome-extension://YOUR_EXTENSION_ID` (locks CORS to your published extension)
+- Set `JWT_SECRET` to a strong random secret (do NOT use the dev fallback)
+- Use Stripe live keys (`sk_live_...`) instead of test keys
+- Ensure HTTPS on the API domain
+- Set all 7 env vars in production
 
 ## Important Notes for LLMs
 
-- **Extension name**: Manifest says "Sift - Amazon Review Analyzer" — the project was previously called "KeyPoints"
 - **Storage keys** use `kp_` prefix: `kp_token`, `kp_user`, `kp_theme`, `kp_cache_{ASIN}`, `kp_chat_{ASIN}`, `kp_comparisons`
 - **Go module** is `github.com/scoogii/keypoints-backend`
-- **API_BASE** is hardcoded to `http://localhost:8080` in `popup.js` — no production URL configured yet
-- **CORS** allows `chrome-extension://` and `http://localhost` origin prefixes
+- **Config** is in `config.js` (loaded before `popup.js`) — use `CONFIG.API_BASE` and `CONFIG.GOOGLE_CLIENT_ID`
+- **CORS** is configurable: set `CORS_ALLOWED_ORIGIN` env var for production, unset for dev mode
 - **Gemini prompts** have strict anti-hallucination rules — do not remove them
 - **Stripe webhook** uses `IgnoreAPIVersionMismatch: true` due to SDK/API version differences
 - **UUID**: User IDs and log IDs are PostgreSQL UUID type via `uuid-ossp` extension; empty `user_id` inserts as NULL
-- **Rate limiting**: By IP using `analysis_logs` table with 24-hour rolling window; `X-Forwarded-For` header is respected
+- **Rate limiting**: By IP using `analysis_logs` table with 24-hour rolling window; `X-Forwarded-For` header is respected; only successful analyses are counted
 - **JWT fallback secret**: If `JWT_SECRET` env var is empty, defaults to `"sift-dev-secret"` — must be set in production
-- **No `.env.example`**: Developers must manually create `.env` with the 6 required variables
-- **Compare is client-side only**: Product comparison does not use AI — it renders saved analysis data side-by-side
-- **Google Client ID** is hardcoded in `popup.js` as `GOOGLE_CLIENT_ID` constant
+- **Compare is client-side only**: Product comparison does not use AI — it renders saved analysis data side-by-side with an auto-generated verdict
+- **Same-product comparison** is blocked by ASIN check
+- **Build outputs** go to `dist/` (gitignored) — never edit files in dist directly
