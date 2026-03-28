@@ -26,7 +26,7 @@ func main() {
 		w.Header().Set("Content-Type", "application/json")
 		w.Write([]byte(`{"status":"ok"}`))
 	})
-	mux.HandleFunc("/api/analyze", handlers.AnalyzeHandler)
+	mux.HandleFunc("/api/analyze", middleware.RateLimit(handlers.AnalyzeHandler))
 	mux.HandleFunc("/api/analyze/remaining", handlers.RemainingHandler)
 	mux.HandleFunc("/api/chat", handlers.ChatHandler)
 

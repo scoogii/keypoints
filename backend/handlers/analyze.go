@@ -52,6 +52,12 @@ func RemainingHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if installID := r.Header.Get("X-Install-ID"); installID != "" {
+		if installCount, err := services.GetAnalysisCountByInstallID(installID); err == nil && installCount > count {
+			count = installCount
+		}
+	}
+
 	remaining := 5 - count
 	if remaining < 0 {
 		remaining = 0
@@ -89,6 +95,8 @@ func AnalyzeHandler(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	installID := r.Header.Get("X-Install-ID")
+
 	var count int
 	if !isPremium {
 		var err error
@@ -98,6 +106,16 @@ func AnalyzeHandler(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "Internal server error", http.StatusInternalServerError)
 			return
 		}
+
+		if installID != "" {
+			installCount, err := services.GetAnalysisCountByInstallID(installID)
+			if err != nil {
+				log.Printf("Error checking install ID analysis count: %v", err)
+			} else if installCount > count {
+				count = installCount
+			}
+		}
+
 		if count >= 5 {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusTooManyRequests)
@@ -116,7 +134,7 @@ func AnalyzeHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := services.LogAnalysis(clientIP, userID); err != nil {
+	if err := services.LogAnalysis(clientIP, installID, userID); err != nil {
 		log.Printf("Error logging analysis: %v", err)
 	}
 

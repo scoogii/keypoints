@@ -27,10 +27,20 @@ function updateRemainingBadge(remaining) {
   badge.classList.toggle('warning', remaining === 0);
 }
 
+async function getInstallId() {
+  const { kp_install_id } = await chrome.storage.local.get('kp_install_id');
+  if (kp_install_id) return kp_install_id;
+  const id = crypto.randomUUID();
+  await chrome.storage.local.set({ kp_install_id: id });
+  return id;
+}
+
 async function apiRequest(endpoint, options = {}) {
   const { kp_token } = await chrome.storage.local.get('kp_token');
+  const installId = await getInstallId();
   const headers = { 'Content-Type': 'application/json', ...options.headers };
   if (kp_token) headers['Authorization'] = `Bearer ${kp_token}`;
+  headers['X-Install-ID'] = installId;
 
   const response = await fetch(`${CONFIG.API_BASE}${endpoint}`, {
     ...options,

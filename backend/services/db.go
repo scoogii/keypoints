@@ -50,6 +50,7 @@ func InitDB() error {
 	_, err = db.Exec(`CREATE TABLE IF NOT EXISTS analysis_logs (
 		id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
 		ip_address TEXT NOT NULL,
+		install_id TEXT NOT NULL DEFAULT '',
 		user_id UUID,
 		created_at TIMESTAMPTZ DEFAULT NOW()
 	)`)
@@ -57,7 +58,14 @@ func InitDB() error {
 		return err
 	}
 
+	db.Exec(`ALTER TABLE analysis_logs ADD COLUMN IF NOT EXISTS install_id TEXT NOT NULL DEFAULT ''`)
+
 	_, err = db.Exec(`CREATE INDEX IF NOT EXISTS idx_analysis_logs_ip_created ON analysis_logs (ip_address, created_at)`)
+	if err != nil {
+		return err
+	}
+
+	_, err = db.Exec(`CREATE INDEX IF NOT EXISTS idx_analysis_logs_install_created ON analysis_logs (install_id, created_at)`)
 	return err
 }
 
@@ -70,14 +78,23 @@ func GetAnalysisCountLast24h(ip string) (int, error) {
 	return count, err
 }
 
-func LogAnalysis(ip string, userID string) error {
+func GetAnalysisCountByInstallID(installID string) (int, error) {
+	var count int
+	err := db.QueryRow(
+		"SELECT COUNT(*) FROM analysis_logs WHERE install_id = $1 AND created_at >= NOW() - INTERVAL '24 hours'",
+		installID,
+	).Scan(&count)
+	return count, err
+}
+
+func LogAnalysis(ip string, installID string, userID string) error {
 	var uid interface{}
 	if userID != "" {
 		uid = userID
 	}
 	_, err := db.Exec(
-		"INSERT INTO analysis_logs (id, ip_address, user_id, created_at) VALUES ($1, $2, $3, NOW())",
-		uuid.New().String(), ip, uid,
+		"INSERT INTO analysis_logs (id, ip_address, install_id, user_id, created_at) VALUES ($1, $2, $3, $4, NOW())",
+		uuid.New().String(), ip, installID, uid,
 	)
 	return err
 }
