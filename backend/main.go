@@ -39,13 +39,18 @@ func main() {
 
 	handler := middleware.CORS(mux)
 
-	log.Println("Sift backend starting on :8080")
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080"
+	}
+
+	log.Printf("Sift backend starting on :%s", port)
 	if origin := os.Getenv("CORS_ALLOWED_ORIGIN"); origin != "" {
 		log.Printf("CORS: production mode, allowing origin: %s", origin)
 	} else {
 		log.Println("CORS: development mode, allowing chrome-extension:// and localhost")
 	}
-	if err := http.ListenAndServe(":8080", handler); err != nil {
+	if err := http.ListenAndServe(":"+port, handler); err != nil {
 		log.Fatal(err)
 	}
 }

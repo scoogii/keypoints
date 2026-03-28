@@ -4,7 +4,7 @@
 
 ## Overview
 
-Sift is a Chrome extension (Manifest V3) that uses AI to analyze Amazon product reviews. It provides free-tier analysis (pros/cons, sentiment, summary, fake detection, category highlights) and premium features ($5/mo via Stripe) including AI chat, price history, product comparison with verdict, and export.
+Sift is a Chrome extension (Manifest V3) that uses AI to analyze Amazon product reviews. It provides free-tier analysis (pros/cons, sentiment, summary, fake detection, category highlights) and premium features ($3.49 AUD/mo via Stripe) including AI chat, price history, product comparison with verdict, and export.
 
 ## Tech Stack
 
@@ -71,7 +71,7 @@ sift/
 | `GEMINI_API_KEY` | Google Gemini API key |
 | `STRIPE_SECRET_KEY` | Stripe secret key (sk_test_... or sk_live_...) |
 | `STRIPE_WEBHOOK_SECRET` | Stripe webhook signing secret (whsec_...) |
-| `STRIPE_PRICE_ID` | Stripe price ID for $5/mo plan (price_...) |
+| `STRIPE_PRICE_ID` | Stripe price ID for $3.49 AUD/mo plan (price_...) |
 | `JWT_SECRET` | Secret for signing/verifying JWTs (defaults to "sift-dev-secret" if unset) |
 | `CORS_ALLOWED_ORIGIN` | (Production only) Restrict CORS to a specific extension origin. If unset, dev mode allows chrome-extension:// and localhost |
 
@@ -131,7 +131,7 @@ sift/
 6. Response shown in chat bubble, messages persisted in `chrome.storage.local` keyed by ASIN
 
 ### Stripe Subscription Flow
-1. User clicks "Upgrade - $5/mo"
+1. User clicks "Upgrade - $3.49/mo"
 2. popup.js sends current tab URL (returnUrl) + JWT to `POST /api/stripe/create-checkout`
 3. Backend searches for existing Stripe customer by email, creates one if not found
 4. Backend checks for existing active subscription (prevents duplicates, returns 409 Conflict)
