@@ -140,6 +140,32 @@ function renderResults(data) {
   document.getElementById('results').style.display = 'block';
 }
 
+function getCacheKey(url) {
+  const match = url.match(/\/(?:dp|gp\/product)\/([A-Z0-9]{10})/);
+  return match ? 'kp_cache_' + match[1] : 'kp_cache_' + btoa(url).slice(0, 30);
+}
+
+async function saveTabCache(url, data) {
+  const key = getCacheKey(url);
+  await chrome.storage.local.set({ [key]: {
+    ...data,
+    cachedAt: Date.now(),
+  }});
+}
+
+async function loadTabCache(url) {
+  const key = getCacheKey(url);
+  const result = await chrome.storage.local.get(key);
+  const cached = result[key];
+  if (!cached) return null;
+  // Expire after 1 hour
+  if (Date.now() - cached.cachedAt > 3600000) {
+    await chrome.storage.local.remove(key);
+    return null;
+  }
+  return cached;
+}
+
 async function analyzeReviews() {
   showLoading(true);
 
@@ -152,7 +178,7 @@ async function analyzeReviews() {
 
     if (reviews.length === 0) {
       showLoading(false);
-      showToast('No reviews found. Make sure you are on a product page with reviews visible.', 'error');
+      showToast('No reviews found. Try refreshing the page and scroll down to load reviews.', 'error');
       return;
     }
 
@@ -188,6 +214,17 @@ async function analyzeReviews() {
     if (kp_user && kp_user.isPremium) {
       showPremiumFeatures();
     }
+
+    // Cache results for this product
+    const tabForCache = await getCurrentTab();
+    await saveTabCache(tabForCache.url, {
+      productName: currentProductName,
+      reviews: currentReviews,
+      asin: currentASIN,
+      price: currentPrice,
+      image: currentImage,
+      analysis: data,
+    });
   } catch (err) {
     showLoading(false);
     showToast('Error analyzing reviews: ' + err.message, 'error');
@@ -566,6 +603,24 @@ document.addEventListener('DOMContentLoaded', async () => {
     document.getElementById('not-amazon').style.display = 'block';
     document.getElementById('main-content').style.display = 'none';
     return;
+  }
+
+  // Restore cached results for this tab
+  const cached = await loadTabCache(tab.url);
+  if (cached) {
+    currentProductName = cached.productName;
+    currentReviews = cached.reviews;
+    currentASIN = cached.asin || '';
+    currentPrice = cached.price || '';
+    currentImage = cached.image || '';
+    lastAnalysis = cached.analysis;
+    document.getElementById('product-name').textContent = currentProductName;
+    renderResults(cached.analysis);
+
+    const { kp_user: cachedUser } = await chrome.storage.local.get('kp_user');
+    if (cachedUser && cachedUser.isPremium) {
+      showPremiumFeatures();
+    }
   }
 
   // Analyze
