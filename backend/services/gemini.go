@@ -112,12 +112,13 @@ func buildAnalyzePrompt(reviews []models.Review, productName string) string {
 }
 
 Instructions:
-- "pros": Extract the most frequently mentioned positive aspects across all reviews. Each point should be a concise, clear statement.
-- "cons": Extract the most frequently mentioned negative aspects across all reviews. Each point should be a concise, clear statement.
+- "pros": Top 3-5 most mentioned positives. Keep each point to one short sentence. ONLY include points explicitly stated in reviews.
+- "cons": Top 3-5 most mentioned negatives. Keep each point to one short sentence. ONLY include points explicitly stated in reviews.
 - "sentimentScore": Overall sentiment from 0 (very negative) to 100 (very positive) based on all reviews.
 - "sentimentLabel": One of "Very Negative" (0-20), "Negative" (21-40), "Mixed" (41-60), "Positive" (61-80), "Very Positive" (81-100).
-- "fakeReviewFlags": Flag any reviews that appear suspicious. Look for: generic/vague language lacking specific details, suspiciously short reviews, signs of incentivized reviews, reviews that don't match the product, identical or near-identical phrasing across reviews, extreme ratings with no justification. Set confidence from 0 to 1. If no suspicious reviews are found, return an empty array.
-- "categoryHighlights": Group insights into relevant categories such as durability, value, comfort, quality, performance, design, ease of use, etc. Only include categories that are actually discussed in the reviews.
+- "fakeReviewFlags": Only flag reviews with HIGH confidence (>0.7) of being fake. Look for: generic/vague language, incentivized reviews, identical phrasing. Maximum 3 flags. If none are clearly suspicious, return an empty array. Do NOT flag reviews just for being short or having strong opinions.
+- "categoryHighlights": Maximum 3-4 categories. Each category should have 2-3 concise points maximum. Only include categories clearly discussed in reviews.
+- CRITICAL: Do NOT invent, assume, or hallucinate any information. Every point must be directly supported by the review text provided.
 `)
 
 	return sb.String()

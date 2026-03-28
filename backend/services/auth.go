@@ -45,7 +45,7 @@ func VerifyGoogleToken(ctx context.Context, accessToken string) (email, name, go
 func jwtSecret() []byte {
 	secret := os.Getenv("JWT_SECRET")
 	if secret == "" {
-		secret = "keypoints-dev-secret"
+		secret = "sift-dev-secret"
 	}
 	return []byte(secret)
 }

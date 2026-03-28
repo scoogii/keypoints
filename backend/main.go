@@ -37,7 +37,7 @@ func main() {
 
 	handler := middleware.CORS(mux)
 
-	log.Println("KeyPoints backend starting on :8080")
+	log.Println("Sift backend starting on :8080")
 	if err := http.ListenAndServe(":8080", handler); err != nil {
 		log.Fatal(err)
 	}

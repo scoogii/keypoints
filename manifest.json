@@ -1,6 +1,6 @@
 {
   "manifest_version": 3,
-  "name": "KeyPoints",
+  "name": "Sift - Amazon Review Analyzer",
   "description": "Amazon review summariser with the help of an AI assistant",
   "action": {
     "default_popup": "popup.html"

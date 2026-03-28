@@ -138,6 +138,8 @@ function renderResults(data) {
   renderCategories(data.categoryHighlights);
   renderFakeReviews(data.fakeReviewFlags);
   document.getElementById('results').style.display = 'block';
+  document.getElementById('analyze').style.display = 'none';
+  document.getElementById('reanalyze').style.display = 'block';
 }
 
 function getCacheKey(url) {
@@ -264,7 +266,7 @@ function generateReport() {
     year: 'numeric', month: 'long', day: 'numeric',
   });
 
-  let report = `Key Points Report - ${currentProductName}\nGenerated: ${date}\n========================\n\n`;
+  let report = `Sift Report - ${currentProductName}\nGenerated: ${date}\n========================\n\n`;
   report += `SENTIMENT: ${data.sentimentLabel} (${data.sentimentScore}%)\n\n`;
 
   report += 'PROS:\n';
@@ -309,7 +311,7 @@ function downloadReport() {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = `keypoints-${currentProductName.slice(0, 50).replace(/[^a-z0-9]/gi, '_')}.txt`;
+  a.download = `sift-${currentProductName.slice(0, 50).replace(/[^a-z0-9]/gi, '_')}.txt`;
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
@@ -317,7 +319,26 @@ function downloadReport() {
   showToast('Report downloaded!', 'success');
 }
 
+// Theme
+
+async function loadTheme() {
+  const { kp_theme } = await chrome.storage.local.get('kp_theme');
+  const theme = kp_theme || 'dark';
+  document.documentElement.setAttribute('data-theme', theme);
+  document.getElementById('theme-toggle').textContent = theme === 'dark' ? '🌙' : '☀️';
+}
+
+async function toggleTheme() {
+  const current = document.documentElement.getAttribute('data-theme') || 'dark';
+  const next = current === 'dark' ? 'light' : 'dark';
+  document.documentElement.setAttribute('data-theme', next);
+  document.getElementById('theme-toggle').textContent = next === 'dark' ? '🌙' : '☀️';
+  await chrome.storage.local.set({ kp_theme: next });
+}
+
 // Compare
+
+let selectedCompareIndices = [];
 
 async function updateCompareCount() {
   const { kp_comparisons } = await chrome.storage.local.get('kp_comparisons');
@@ -380,6 +401,9 @@ async function renderCompareCards() {
   const empty = document.getElementById('compare-empty');
 
   container.innerHTML = '';
+  selectedCompareIndices = [];
+  document.getElementById('run-compare').style.display = 'none';
+  document.getElementById('compare-result').style.display = 'none';
 
   if (comparisons.length === 0) {
     empty.style.display = 'block';
@@ -395,6 +419,7 @@ async function renderCompareCards() {
 
     const card = document.createElement('div');
     card.className = 'compare-card';
+    card.dataset.index = index;
     card.innerHTML = `
       <div class="compare-card-header">
         ${item.image ? `<img class="compare-card-image" src="${item.image}" alt="" />` : ''}
@@ -421,14 +446,80 @@ async function renderCompareCards() {
       </div>
       <button type="button" class="compare-card-remove" data-index="${index}">Remove</button>
     `;
+
+    card.addEventListener('click', (e) => {
+      if (e.target.classList.contains('compare-card-remove')) return;
+      toggleCompareSelection(parseInt(card.dataset.index));
+    });
+
     container.appendChild(card);
   });
 
   container.querySelectorAll('.compare-card-remove').forEach(btn => {
     btn.addEventListener('click', (e) => {
+      e.stopPropagation();
       removeComparison(parseInt(e.target.dataset.index));
     });
   });
+}
+
+function toggleCompareSelection(index) {
+  const pos = selectedCompareIndices.indexOf(index);
+  if (pos !== -1) {
+    selectedCompareIndices.splice(pos, 1);
+  } else {
+    if (selectedCompareIndices.length >= 2) return;
+    selectedCompareIndices.push(index);
+  }
+
+  document.querySelectorAll('.compare-card').forEach(card => {
+    const i = parseInt(card.dataset.index);
+    card.classList.toggle('compare-card-selected', selectedCompareIndices.includes(i));
+  });
+
+  document.getElementById('run-compare').style.display =
+    selectedCompareIndices.length === 2 ? 'block' : 'none';
+}
+
+async function runComparison() {
+  const { kp_comparisons } = await chrome.storage.local.get('kp_comparisons');
+  const comparisons = kp_comparisons || [];
+  const a = comparisons[selectedCompareIndices[0]];
+  const b = comparisons[selectedCompareIndices[1]];
+  if (!a || !b) return;
+
+  const resultDiv = document.getElementById('compare-result');
+  const colorA = a.sentimentScore >= 70 ? '#50bf68' : a.sentimentScore >= 40 ? '#f0ad4e' : '#d9534f';
+  const colorB = b.sentimentScore >= 70 ? '#50bf68' : b.sentimentScore >= 40 ? '#f0ad4e' : '#d9534f';
+
+  const prosA = (a.pros || []).map(p => `<li>✅ ${p.point}</li>`).join('');
+  const consA = (a.cons || []).map(c => `<li>⚠️ ${c.point}</li>`).join('');
+  const prosB = (b.pros || []).map(p => `<li>✅ ${p.point}</li>`).join('');
+  const consB = (b.cons || []).map(c => `<li>⚠️ ${c.point}</li>`).join('');
+
+  resultDiv.innerHTML = `
+    <div class="compare-result-grid">
+      <div class="compare-result-product">
+        <h3>${a.productName}</h3>
+        <div class="sentiment-bar" style="height:4px; margin-bottom:6px;">
+          <div class="sentiment-fill" style="width:${a.sentimentScore}%; background:${colorA}"></div>
+        </div>
+        <span class="sentiment-label" style="font-size:11px;">${a.sentimentLabel} (${a.sentimentScore}%)</span>
+        <ul class="compare-result-list">${prosA}</ul>
+        <ul class="compare-result-list">${consA}</ul>
+      </div>
+      <div class="compare-result-product">
+        <h3>${b.productName}</h3>
+        <div class="sentiment-bar" style="height:4px; margin-bottom:6px;">
+          <div class="sentiment-fill" style="width:${b.sentimentScore}%; background:${colorB}"></div>
+        </div>
+        <span class="sentiment-label" style="font-size:11px;">${b.sentimentLabel} (${b.sentimentScore}%)</span>
+        <ul class="compare-result-list">${prosB}</ul>
+        <ul class="compare-result-list">${consB}</ul>
+      </div>
+    </div>
+  `;
+  resultDiv.style.display = 'block';
 }
 
 async function removeComparison(index) {
@@ -529,6 +620,53 @@ function addChatMessage(text, role) {
   container.scrollTop = container.scrollHeight;
 }
 
+function addTypingIndicator() {
+  const container = document.getElementById('chat-messages');
+  const div = document.createElement('div');
+  div.className = 'chat-message assistant typing-indicator';
+  div.id = 'typing-indicator';
+  div.innerHTML = '<span class="dot"></span><span class="dot"></span><span class="dot"></span>';
+  container.appendChild(div);
+  container.scrollTop = container.scrollHeight;
+  return div;
+}
+
+function removeTypingIndicator() {
+  const el = document.getElementById('typing-indicator');
+  if (el) el.remove();
+}
+
+async function persistChatMessages() {
+  if (!currentASIN) return;
+  const container = document.getElementById('chat-messages');
+  const messages = [];
+  container.querySelectorAll('.chat-message').forEach(el => {
+    if (el.classList.contains('typing-indicator')) return;
+    messages.push({
+      text: el.textContent,
+      role: el.classList.contains('user') ? 'user' : 'assistant',
+    });
+  });
+  await chrome.storage.local.set({ ['kp_chat_' + currentASIN]: messages });
+}
+
+async function restoreChatMessages() {
+  if (!currentASIN) return;
+  const key = 'kp_chat_' + currentASIN;
+  const result = await chrome.storage.local.get(key);
+  const messages = result[key];
+  if (!messages || !messages.length) return;
+  const container = document.getElementById('chat-messages');
+  container.innerHTML = '';
+  messages.forEach(m => {
+    const div = document.createElement('div');
+    div.className = `chat-message ${m.role}`;
+    div.textContent = m.text;
+    container.appendChild(div);
+  });
+  container.scrollTop = container.scrollHeight;
+}
+
 async function sendChatMessage() {
   const input = document.getElementById('chat-input');
   const question = input.value.trim();
@@ -536,6 +674,8 @@ async function sendChatMessage() {
 
   input.value = '';
   addChatMessage(question, 'user');
+  await persistChatMessages();
+  addTypingIndicator();
 
   try {
     // Scrape full product page details for chat context
@@ -559,15 +699,21 @@ async function sendChatMessage() {
     if (!response.ok) throw new Error('Chat request failed');
 
     const data = await response.json();
+    removeTypingIndicator();
     addChatMessage(data.answer, 'assistant');
   } catch (err) {
+    removeTypingIndicator();
     addChatMessage('Error: ' + err.message, 'assistant');
   }
+  await persistChatMessages();
 }
 
 // Init
 
 document.addEventListener('DOMContentLoaded', async () => {
+  // Load theme
+  await loadTheme();
+
   // Check stored auth
   const { kp_token, kp_user } = await chrome.storage.local.get(['kp_token', 'kp_user']);
 
@@ -621,6 +767,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (cachedUser && cachedUser.isPremium) {
       showPremiumFeatures();
     }
+
+    await restoreChatMessages();
   }
 
   // Analyze
@@ -657,10 +805,21 @@ document.addEventListener('DOMContentLoaded', async () => {
   document.getElementById('copy-clipboard').addEventListener('click', copyToClipboard);
   document.getElementById('download-report').addEventListener('click', downloadReport);
 
+  // Re-analyze
+  document.getElementById('reanalyze').addEventListener('click', () => {
+    document.getElementById('reanalyze').style.display = 'none';
+    document.getElementById('analyze').style.display = 'block';
+    analyzeReviews();
+  });
+
+  // Theme toggle
+  document.getElementById('theme-toggle').addEventListener('click', toggleTheme);
+
   // Compare
   document.getElementById('save-comparison').addEventListener('click', saveForComparison);
   document.getElementById('compare-products').addEventListener('click', showCompareView);
   document.getElementById('compare-back').addEventListener('click', hideCompareView);
+  document.getElementById('run-compare').addEventListener('click', runComparison);
 
   // Chat
   document.getElementById('chat-send').addEventListener('click', sendChatMessage);

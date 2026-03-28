@@ -6,7 +6,10 @@
 </head>
 <body>
   <div class="container">
-    <h1>Key Points</h1>
+    <div class="header-row">
+      <h1>Sift</h1>
+      <button type="button" id="theme-toggle" class="btn-theme" title="Toggle theme">🌙</button>
+    </div>
 
     <div id="auth-section">
       <div id="logged-out">
@@ -23,7 +26,7 @@
     </div>
 
     <div id="not-amazon" class="message" style="display:none;">
-      <p>Navigate to an Amazon product page to use KeyPoints.</p>
+      <p>Navigate to an Amazon product page to use Sift.</p>
     </div>
 
     <div id="main-content">
@@ -31,6 +34,7 @@
 
       <div class="button-group">
         <button type="button" id="analyze" class="btn-primary">Analyze Reviews</button>
+        <button type="button" id="reanalyze" class="btn-reanalyze" style="display:none;">↻ Re-analyze</button>
         <div id="remaining-badge" class="remaining-badge" style="display:none;"></div>
       </div>
 
@@ -128,6 +132,8 @@
         <h2>Compare Products</h2>
         <button type="button" id="compare-back" class="btn-logout">← Back</button>
       </div>
+      <button type="button" id="run-compare" class="btn-primary" style="display:none; margin-bottom: 12px;">Compare Selected</button>
+      <div id="compare-result" style="display:none;"></div>
       <div id="compare-cards" class="compare-cards"></div>
       <div id="compare-empty" class="compare-empty">
         <p>No products saved yet. Analyze a product and click "Save for Comparison".</p>
