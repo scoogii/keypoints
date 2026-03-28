@@ -1,0 +1,4 @@
+- Analyse the WHOLE product page
+- Compare products, export summaries, price history implementation
+- Chat bubble loading to show its replying
+- Dark light mode

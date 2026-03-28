@@ -8,6 +8,14 @@
   "version": "1.0",
   "permissions": [
     "activeTab",
-    "scripting"
+    "scripting",
+    "identity",
+    "storage"
+  ],
+  "content_scripts": [
+    {
+      "matches": ["*://*.amazon.com/*", "*://*.amazon.co.uk/*", "*://*.amazon.ca/*", "*://*.amazon.com.au/*"],
+      "js": ["content.js"]
+    }
   ]
 }
