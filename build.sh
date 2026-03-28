@@ -21,7 +21,7 @@ rm -rf dist
 mkdir -p dist
 
 # Copy extension files
-cp manifest.json popup.html popup.css popup.js content.js config.js dist/
+cp manifest.json popup.html popup.css popup.js content.js config.js icon16.png icon48.png icon128.png dist/
 
 # Write production config
 cat > dist/config.js << EOF
@@ -33,7 +33,7 @@ EOF
 
 # Create zip
 cd dist
-zip -r sift-extension.zip manifest.json popup.html popup.css popup.js content.js config.js
+zip -r sift-extension.zip manifest.json popup.html popup.css popup.js content.js config.js icon16.png icon48.png icon128.png
 cd ..
 
 echo ""

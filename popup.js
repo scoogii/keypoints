@@ -343,7 +343,7 @@ async function updateCompareCount() {
   const count = (kp_comparisons || []).length;
   const badge = document.getElementById('compare-count');
   if (badge) {
-    badge.textContent = count > 0 ? count : '';
+    badge.textContent = count;
   }
 }
 
