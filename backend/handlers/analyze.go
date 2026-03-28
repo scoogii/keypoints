@@ -55,7 +55,7 @@ func AnalyzeHandler(w http.ResponseWriter, r *http.Request) {
 	var count int
 	if !isPremium {
 		var err error
-		count, err = services.GetAnalysisCountToday(clientIP)
+		count, err = services.GetAnalysisCountLast24h(clientIP)
 		if err != nil {
 			log.Printf("Error checking analysis count: %v", err)
 			http.Error(w, "Internal server error", http.StatusInternalServerError)

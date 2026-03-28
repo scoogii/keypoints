@@ -3,6 +3,11 @@ const GOOGLE_CLIENT_ID = '661661459372-vo69p37g9hodrhll0sr6skp7tgr92d4i.apps.goo
 
 let currentReviews = [];
 let currentProductName = '';
+let currentProductDetails = {};
+let currentASIN = '';
+let currentPrice = '';
+let currentImage = '';
+let lastAnalysis = null;
 
 function showToast(message, type = 'info') {
   const toast = document.getElementById('toast');
@@ -49,7 +54,15 @@ function isAmazonPage(url) {
 async function scrapeReviews(tabId) {
   return new Promise((resolve) => {
     chrome.tabs.sendMessage(tabId, { action: 'scrapeReviews' }, (response) => {
-      resolve(response || { productName: '', reviews: [] });
+      resolve(response || { productName: '', reviews: [], asin: '', price: '', image: '' });
+    });
+  });
+}
+
+async function scrapeProductPage(tabId) {
+  return new Promise((resolve) => {
+    chrome.tabs.sendMessage(tabId, { action: 'scrapeProductPage' }, (response) => {
+      resolve(response || { productName: '', reviews: [], productDetails: {} });
     });
   });
 }
@@ -132,7 +145,10 @@ async function analyzeReviews() {
 
   try {
     const tab = await getCurrentTab();
-    const { productName, reviews } = await scrapeReviews(tab.id);
+    const { productName, reviews, asin, price, image } = await scrapeReviews(tab.id);
+    currentASIN = asin || '';
+    currentPrice = price || '';
+    currentImage = image || '';
 
     if (reviews.length === 0) {
       showLoading(false);
@@ -144,9 +160,8 @@ async function analyzeReviews() {
     currentProductName = productName;
     document.getElementById('product-name').textContent = productName;
 
-    const response = await fetch(`${API_BASE}/api/analyze`, {
+    const response = await apiRequest('/api/analyze', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ reviews, productName }),
     });
 
@@ -163,13 +178,229 @@ async function analyzeReviews() {
     showLoading(false);
     renderResults(data);
 
+    lastAnalysis = data;
+
     if (data.remainingAnalyses !== undefined) {
       updateRemainingBadge(data.remainingAnalyses);
+    }
+
+    const { kp_user } = await chrome.storage.local.get('kp_user');
+    if (kp_user && kp_user.isPremium) {
+      showPremiumFeatures();
     }
   } catch (err) {
     showLoading(false);
     showToast('Error analyzing reviews: ' + err.message, 'error');
   }
+}
+
+// Premium Features
+
+function showPremiumFeatures() {
+  const premiumFeatures = document.getElementById('premium-features');
+  premiumFeatures.style.display = 'block';
+
+  const priceHistory = document.getElementById('price-history');
+  if (currentASIN) {
+    priceHistory.style.display = 'block';
+    const chartUrl = `https://charts.camelcamelcamel.com/us/${currentASIN}/amazon.png?force=1&zero=0&w=500&h=200&desired=false&legend=1&ilt=1&tp=all&fo=0&lang=en`;
+    document.getElementById('price-chart').src = chartUrl;
+
+    const isAU = /amazon\.com\.au/.test(location.href || '');
+    getCurrentTab().then(tab => {
+      const isAUPage = /amazon\.com\.au/.test(tab.url || '');
+      const camelBase = isAUPage ? 'https://au.camelcamelcamel.com' : 'https://camelcamelcamel.com';
+      document.getElementById('camel-link').href = `${camelBase}/product/${currentASIN}`;
+    });
+  } else {
+    priceHistory.style.display = 'none';
+  }
+}
+
+// Export
+
+function generateReport() {
+  if (!lastAnalysis) return '';
+
+  const data = lastAnalysis;
+  const date = new Date().toLocaleDateString('en-US', {
+    year: 'numeric', month: 'long', day: 'numeric',
+  });
+
+  let report = `Key Points Report - ${currentProductName}\nGenerated: ${date}\n========================\n\n`;
+  report += `SENTIMENT: ${data.sentimentLabel} (${data.sentimentScore}%)\n\n`;
+
+  report += 'PROS:\n';
+  data.pros.forEach(p => { report += `• ${p.point}\n`; });
+
+  report += '\nCONS:\n';
+  data.cons.forEach(c => { report += `• ${c.point}\n`; });
+
+  if (data.categoryHighlights && data.categoryHighlights.length > 0) {
+    report += '\nREVIEW HIGHLIGHTS:\n';
+    data.categoryHighlights.forEach(cat => {
+      report += `[${cat.category}]:\n`;
+      cat.points.forEach(p => { report += `  - ${p}\n`; });
+    });
+  }
+
+  if (data.fakeReviewFlags && data.fakeReviewFlags.length > 0) {
+    report += '\nSUSPICIOUS REVIEWS:\n';
+    data.fakeReviewFlags.forEach(f => {
+      report += `"${f.reviewTitle}" - ${f.reason} (Confidence: ${Math.round(f.confidence * 100)}%)\n`;
+    });
+  }
+
+  return report;
+}
+
+async function copyToClipboard() {
+  const text = generateReport();
+  if (!text) return;
+  try {
+    await navigator.clipboard.writeText(text);
+    showToast('Copied to clipboard!', 'success');
+  } catch {
+    showToast('Failed to copy to clipboard', 'error');
+  }
+}
+
+function downloadReport() {
+  const text = generateReport();
+  if (!text) return;
+  const blob = new Blob([text], { type: 'text/plain' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `keypoints-${currentProductName.slice(0, 50).replace(/[^a-z0-9]/gi, '_')}.txt`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  showToast('Report downloaded!', 'success');
+}
+
+// Compare
+
+async function updateCompareCount() {
+  const { kp_comparisons } = await chrome.storage.local.get('kp_comparisons');
+  const count = (kp_comparisons || []).length;
+  const badge = document.getElementById('compare-count');
+  if (badge) {
+    badge.textContent = count > 0 ? count : '';
+  }
+}
+
+async function saveForComparison() {
+  if (!lastAnalysis) return;
+
+  const { kp_comparisons } = await chrome.storage.local.get('kp_comparisons');
+  const comparisons = kp_comparisons || [];
+
+  if (comparisons.length >= 5) {
+    showToast('Maximum 5 comparisons saved. Remove one first.', 'error');
+    return;
+  }
+
+  const exists = comparisons.some(c => c.asin === currentASIN && currentASIN);
+  if (exists) {
+    showToast('This product is already saved for comparison.', 'info');
+    return;
+  }
+
+  comparisons.push({
+    productName: currentProductName,
+    asin: currentASIN,
+    price: currentPrice,
+    image: currentImage,
+    sentimentScore: lastAnalysis.sentimentScore,
+    sentimentLabel: lastAnalysis.sentimentLabel,
+    pros: lastAnalysis.pros,
+    cons: lastAnalysis.cons,
+    savedAt: new Date().toISOString(),
+  });
+
+  await chrome.storage.local.set({ kp_comparisons: comparisons });
+  updateCompareCount();
+  showToast('Saved for comparison!', 'success');
+}
+
+async function showCompareView() {
+  document.getElementById('main-content').style.display = 'none';
+  document.getElementById('compare-view').style.display = 'block';
+  await renderCompareCards();
+}
+
+function hideCompareView() {
+  document.getElementById('main-content').style.display = 'block';
+  document.getElementById('compare-view').style.display = 'none';
+}
+
+async function renderCompareCards() {
+  const { kp_comparisons } = await chrome.storage.local.get('kp_comparisons');
+  const comparisons = kp_comparisons || [];
+  const container = document.getElementById('compare-cards');
+  const empty = document.getElementById('compare-empty');
+
+  container.innerHTML = '';
+
+  if (comparisons.length === 0) {
+    empty.style.display = 'block';
+    return;
+  }
+
+  empty.style.display = 'none';
+
+  comparisons.forEach((item, index) => {
+    const color = item.sentimentScore >= 70 ? '#50bf68' : item.sentimentScore >= 40 ? '#f0ad4e' : '#d9534f';
+    const prosHtml = (item.pros || []).slice(0, 3).map(p => `<li>${p.point}</li>`).join('');
+    const consHtml = (item.cons || []).slice(0, 3).map(c => `<li>${c.point}</li>`).join('');
+
+    const card = document.createElement('div');
+    card.className = 'compare-card';
+    card.innerHTML = `
+      <div class="compare-card-header">
+        ${item.image ? `<img class="compare-card-image" src="${item.image}" alt="" />` : ''}
+        <div class="compare-card-info">
+          <div class="compare-card-name">${item.productName}</div>
+          ${item.price ? `<div class="compare-card-price">${item.price}</div>` : ''}
+        </div>
+      </div>
+      <div class="compare-card-sentiment">
+        <div class="sentiment-bar" style="height:4px;">
+          <div class="sentiment-fill" style="width:${item.sentimentScore}%; background:${color}"></div>
+        </div>
+        <span class="sentiment-label" style="font-size:11px;">${item.sentimentLabel} (${item.sentimentScore}%)</span>
+      </div>
+      <div class="compare-card-lists">
+        <div class="compare-card-list">
+          <h3>Pros</h3>
+          <ul>${prosHtml || '<li>—</li>'}</ul>
+        </div>
+        <div class="compare-card-list">
+          <h3>Cons</h3>
+          <ul>${consHtml || '<li>—</li>'}</ul>
+        </div>
+      </div>
+      <button type="button" class="compare-card-remove" data-index="${index}">Remove</button>
+    `;
+    container.appendChild(card);
+  });
+
+  container.querySelectorAll('.compare-card-remove').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      removeComparison(parseInt(e.target.dataset.index));
+    });
+  });
+}
+
+async function removeComparison(index) {
+  const { kp_comparisons } = await chrome.storage.local.get('kp_comparisons');
+  const comparisons = kp_comparisons || [];
+  comparisons.splice(index, 1);
+  await chrome.storage.local.set({ kp_comparisons: comparisons });
+  updateCompareCount();
+  renderCompareCards();
 }
 
 // Auth
@@ -270,11 +501,20 @@ async function sendChatMessage() {
   addChatMessage(question, 'user');
 
   try {
+    // Scrape full product page details for chat context
+    if (!currentProductDetails || Object.keys(currentProductDetails).length === 0) {
+      const tab = await getCurrentTab();
+      const pageData = await scrapeProductPage(tab.id);
+      currentProductDetails = pageData.productDetails || {};
+      currentProductDetails.price = currentPrice;
+    }
+
     const response = await apiRequest('/api/chat', {
       method: 'POST',
       body: JSON.stringify({
         reviews: currentReviews,
         productName: currentProductName,
+        productDetails: currentProductDetails,
         question,
       }),
     });
@@ -311,6 +551,9 @@ document.addEventListener('DOMContentLoaded', async () => {
   } else {
     updateAuthUI(null);
   }
+
+  // Update compare count badge
+  updateCompareCount();
 
   // Auth event listeners
   document.getElementById('google-login').addEventListener('click', login);
@@ -354,6 +597,15 @@ document.addEventListener('DOMContentLoaded', async () => {
       showToast('Error: ' + err.message, 'error');
     }
   });
+
+  // Export
+  document.getElementById('copy-clipboard').addEventListener('click', copyToClipboard);
+  document.getElementById('download-report').addEventListener('click', downloadReport);
+
+  // Compare
+  document.getElementById('save-comparison').addEventListener('click', saveForComparison);
+  document.getElementById('compare-products').addEventListener('click', showCompareView);
+  document.getElementById('compare-back').addEventListener('click', hideCompareView);
 
   // Chat
   document.getElementById('chat-send').addEventListener('click', sendChatMessage);

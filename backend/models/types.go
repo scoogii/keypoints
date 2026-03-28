@@ -41,10 +41,21 @@ type AnalyzeResponseWrapper struct {
 	RemainingAnalyses int `json:"remainingAnalyses"`
 }
 
+type ProductDetails struct {
+	Features         []string          `json:"features,omitempty"`
+	Description      string            `json:"description,omitempty"`
+	Specifications   map[string]string `json:"specifications,omitempty"`
+	ManufacturerInfo string            `json:"manufacturerInfo,omitempty"`
+	OverallRating    string            `json:"overallRating,omitempty"`
+	TotalReviews     string            `json:"totalReviews,omitempty"`
+	Price            string            `json:"price,omitempty"`
+}
+
 type ChatRequest struct {
-	Reviews     []Review `json:"reviews"`
-	ProductName string   `json:"productName"`
-	Question    string   `json:"question"`
+	Reviews        []Review       `json:"reviews"`
+	ProductName    string         `json:"productName"`
+	ProductDetails ProductDetails `json:"productDetails"`
+	Question       string         `json:"question"`
 }
 
 type ChatResponse struct {

@@ -67,6 +67,30 @@
           <h2>🚩 Suspicious Reviews</h2>
           <div id="fake-reviews"></div>
         </div>
+
+        <!-- Premium Features (shown after analysis for premium users) -->
+        <div id="premium-features" style="display:none;">
+          <!-- Export -->
+          <div class="section">
+            <h2>📤 Export</h2>
+            <div class="export-buttons">
+              <button type="button" id="copy-clipboard" class="btn-export">📋 Copy to Clipboard</button>
+              <button type="button" id="download-report" class="btn-export">📄 Download Report</button>
+            </div>
+          </div>
+
+          <!-- Save for Comparison -->
+          <div class="section">
+            <button type="button" id="save-comparison" class="btn-export">💾 Save for Comparison</button>
+          </div>
+
+          <!-- Price History -->
+          <div id="price-history" class="section">
+            <h2>📈 Price History</h2>
+            <img id="price-chart" class="price-chart" alt="Price History Chart" />
+            <a id="camel-link" class="camel-link" target="_blank">View on CamelCamelCamel →</a>
+          </div>
+        </div>
       </div>
 
       <!-- Chat Section (Premium) -->
@@ -91,8 +115,22 @@
         </div>
         <div id="premium-active" style="display:none;">
           <p class="premium-badge">✅ Premium Active</p>
-          <button type="button" id="manage-subscription" class="btn-manage">Manage Subscription</button>
+          <div class="premium-active-buttons">
+            <button type="button" id="compare-products" class="btn-manage">Compare Products <span id="compare-count" class="compare-count"></span></button>
+            <button type="button" id="manage-subscription" class="btn-manage">Manage Subscription</button>
+          </div>
         </div>
+      </div>
+    </div>
+
+    <div id="compare-view" style="display:none;">
+      <div class="compare-header">
+        <h2>Compare Products</h2>
+        <button type="button" id="compare-back" class="btn-logout">← Back</button>
+      </div>
+      <div id="compare-cards" class="compare-cards"></div>
+      <div id="compare-empty" class="compare-empty">
+        <p>No products saved yet. Analyze a product and click "Save for Comparison".</p>
       </div>
     </div>
   </div>

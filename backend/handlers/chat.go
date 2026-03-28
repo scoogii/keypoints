@@ -45,7 +45,7 @@ func ChatHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	answer, err := services.Chat(r.Context(), req.Reviews, req.ProductName, req.Question)
+	answer, err := services.Chat(r.Context(), req.Reviews, req.ProductName, req.ProductDetails, req.Question)
 	if err != nil {
 		log.Printf("Error in chat: %v", err)
 		http.Error(w, "Failed to process chat", http.StatusInternalServerError)

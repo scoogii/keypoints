@@ -53,7 +53,7 @@ func AnalyzeReviews(ctx context.Context, reviews []models.Review, productName st
 	return &result, nil
 }
 
-func Chat(ctx context.Context, reviews []models.Review, productName string, question string) (string, error) {
+func Chat(ctx context.Context, reviews []models.Review, productName string, productDetails models.ProductDetails, question string) (string, error) {
 	apiKey := os.Getenv("GEMINI_API_KEY")
 	if apiKey == "" {
 		return "", fmt.Errorf("GEMINI_API_KEY environment variable is not set")
@@ -68,7 +68,7 @@ func Chat(ctx context.Context, reviews []models.Review, productName string, ques
 	model := client.GenerativeModel("gemini-2.5-flash")
 	model.SetTemperature(0.5)
 
-	prompt := buildChatPrompt(reviews, productName, question)
+	prompt := buildChatPrompt(reviews, productName, productDetails, question)
 
 	resp, err := model.GenerateContent(ctx, genai.Text(prompt))
 	if err != nil {
@@ -123,17 +123,55 @@ Instructions:
 	return sb.String()
 }
 
-func buildChatPrompt(reviews []models.Review, productName string, question string) string {
+func buildChatPrompt(reviews []models.Review, productName string, details models.ProductDetails, question string) string {
 	var sb strings.Builder
 
-	sb.WriteString(fmt.Sprintf("You are a helpful assistant that answers questions about Amazon product reviews for \"%s\".\n\n", productName))
+	sb.WriteString(fmt.Sprintf("You are a helpful assistant that answers questions about the Amazon product \"%s\".\n\n", productName))
+	sb.WriteString("IMPORTANT RULES:\n")
+	sb.WriteString("- ONLY answer based on the product information and reviews provided below.\n")
+	sb.WriteString("- If the answer is not found in the provided information, say \"I don't have enough information from this product page to answer that.\"\n")
+	sb.WriteString("- NEVER make up or guess information that is not explicitly stated in the data below.\n")
+	sb.WriteString("- Be concise and helpful.\n\n")
 
-	sb.WriteString("Here are the reviews:\n")
-	for i, r := range reviews {
-		sb.WriteString(fmt.Sprintf("--- Review %d ---\nTitle: %s\nRating: %d/5\nBody: %s\n\n", i+1, r.Title, r.Rating, r.Body))
+	// Product details
+	sb.WriteString("=== PRODUCT INFORMATION ===\n")
+	if details.Price != "" {
+		sb.WriteString(fmt.Sprintf("Price: %s\n", details.Price))
+	}
+	if details.OverallRating != "" {
+		sb.WriteString(fmt.Sprintf("Rating: %s\n", details.OverallRating))
+	}
+	if details.TotalReviews != "" {
+		sb.WriteString(fmt.Sprintf("Total Reviews: %s\n", details.TotalReviews))
+	}
+	if len(details.Features) > 0 {
+		sb.WriteString("\nFeatures:\n")
+		for _, f := range details.Features {
+			sb.WriteString(fmt.Sprintf("• %s\n", f))
+		}
+	}
+	if details.Description != "" {
+		sb.WriteString(fmt.Sprintf("\nDescription:\n%s\n", details.Description))
+	}
+	if len(details.Specifications) > 0 {
+		sb.WriteString("\nSpecifications:\n")
+		for k, v := range details.Specifications {
+			sb.WriteString(fmt.Sprintf("  %s: %s\n", k, v))
+		}
+	}
+	if details.ManufacturerInfo != "" {
+		sb.WriteString(fmt.Sprintf("\nManufacturer Info:\n%s\n", details.ManufacturerInfo))
 	}
 
-	sb.WriteString(fmt.Sprintf("User question: %s\n\nProvide a helpful, concise answer based on the reviews above.", question))
+	// Reviews
+	if len(reviews) > 0 {
+		sb.WriteString("\n=== CUSTOMER REVIEWS ===\n")
+		for i, r := range reviews {
+			sb.WriteString(fmt.Sprintf("--- Review %d ---\nTitle: %s\nRating: %d/5\nBody: %s\n\n", i+1, r.Title, r.Rating, r.Body))
+		}
+	}
+
+	sb.WriteString(fmt.Sprintf("\nUser question: %s", question))
 
 	return sb.String()
 }
