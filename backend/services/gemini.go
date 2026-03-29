@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math/rand/v2"
 	"os"
 	"strings"
 
@@ -27,7 +28,9 @@ func AnalyzeReviews(ctx context.Context, reviews []models.Review, productName st
 	model := client.GenerativeModel("gemini-2.5-flash")
 	model.SetTemperature(0.3)
 
-	prompt := buildAnalyzePrompt(reviews, productName)
+	totalCount := len(reviews)
+	sampled := sampleReviews(reviews, 250)
+	prompt := buildAnalyzePrompt(sampled, totalCount, productName)
 
 	resp, err := model.GenerateContent(ctx, genai.Text(prompt))
 	if err != nil {
@@ -87,10 +90,88 @@ func Chat(ctx context.Context, reviews []models.Review, productName string, prod
 	return string(text), nil
 }
 
-func buildAnalyzePrompt(reviews []models.Review, productName string) string {
+// sampleReviews returns a stratified sample of reviews by star rating.
+// If there are fewer reviews than maxSample, all reviews are returned.
+func sampleReviews(reviews []models.Review, maxSample int) []models.Review {
+	if len(reviews) <= maxSample {
+		return reviews
+	}
+
+	// Group reviews by star rating (1-5)
+	buckets := make(map[int][]models.Review)
+	for _, r := range reviews {
+		rating := r.Rating
+		if rating < 1 {
+			rating = 1
+		} else if rating > 5 {
+			rating = 5
+		}
+		buckets[rating] = append(buckets[rating], r)
+	}
+
+	// Calculate proportional sample size per bucket
+	sampled := make([]models.Review, 0, maxSample)
+	total := len(reviews)
+
+	for rating := 1; rating <= 5; rating++ {
+		bucket := buckets[rating]
+		if len(bucket) == 0 {
+			continue
+		}
+
+		// Proportional allocation
+		n := (len(bucket) * maxSample) / total
+		if n < 1 {
+			n = 1
+		}
+		if n > len(bucket) {
+			n = len(bucket)
+		}
+
+		// Shuffle and take n
+		rand.Shuffle(len(bucket), func(i, j int) {
+			bucket[i], bucket[j] = bucket[j], bucket[i]
+		})
+		sampled = append(sampled, bucket[:n]...)
+	}
+
+	// If rounding left us short, fill from remaining reviews
+	if len(sampled) < maxSample {
+		seen := make(map[int]bool)
+		for i, r := range reviews {
+			for _, s := range sampled {
+				if r.Title == s.Title && r.Body == s.Body {
+					seen[i] = true
+					break
+				}
+			}
+		}
+		for i, r := range reviews {
+			if len(sampled) >= maxSample {
+				break
+			}
+			if !seen[i] {
+				sampled = append(sampled, r)
+			}
+		}
+	}
+
+	// Trim if rounding gave us too many
+	if len(sampled) > maxSample {
+		sampled = sampled[:maxSample]
+	}
+
+	return sampled
+}
+
+func buildAnalyzePrompt(reviews []models.Review, totalReviewCount int, productName string) string {
 	var sb strings.Builder
 
-	sb.WriteString(fmt.Sprintf("Analyze the following %d Amazon product reviews for \"%s\".\n\n", len(reviews), productName))
+	if len(reviews) < totalReviewCount {
+		sb.WriteString(fmt.Sprintf("Analyze the following representative sample of %d reviews (from %d total) for the Amazon product \"%s\".\n\n", len(reviews), totalReviewCount, productName))
+	} else {
+		sb.WriteString(fmt.Sprintf("Analyze the following %d Amazon product reviews for \"%s\".\n\n", len(reviews), productName))
+	}
 
 	sb.WriteString("Reviews:\n")
 	for i, r := range reviews {

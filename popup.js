@@ -194,7 +194,7 @@ async function analyzeReviews() {
       return;
     }
 
-    loadingText.textContent = `Analyzing ${reviews.length} reviews...`;
+    loadingText.textContent = `Analyzing ${reviews.length} review${reviews.length === 1 ? '' : 's'}...`;
     currentReviews = reviews;
     currentProductName = productName;
     document.getElementById('product-name').textContent = productName;
