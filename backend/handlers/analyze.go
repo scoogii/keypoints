@@ -6,6 +6,7 @@ import (
 	"net"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/scoogii/keypoints-backend/middleware"
 	"github.com/scoogii/keypoints-backend/models"
@@ -127,7 +128,38 @@ func AnalyzeHandler(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	result, err := services.AnalyzeReviews(r.Context(), req.Reviews, req.ProductName)
+	// Deep scrape reviews from Amazon if ASIN and domain are provided
+	analyzeStart := time.Now()
+	reviews := req.Reviews
+	var starDist map[int]int
+	if req.ASIN != "" && req.Domain != "" {
+		scrapeStart := time.Now()
+		scrapeResult, err := services.ScrapeReviews(req.ASIN, req.Domain, 1000, req.Cookies)
+		log.Printf("[Timing] Scrape took %v", time.Since(scrapeStart))
+		if err != nil {
+			log.Printf("Scraper error (using on-page reviews): %v", err)
+		} else if len(scrapeResult.Reviews) > len(reviews) {
+			// Merge: start with scraped, add any on-page reviews not already present
+			seen := make(map[string]bool)
+			for _, r := range scrapeResult.Reviews {
+				key := r.Title + "|" + r.Body
+				seen[key] = true
+			}
+			for _, r := range reviews {
+				key := r.Title + "|" + r.Body
+				if !seen[key] {
+					scrapeResult.Reviews = append(scrapeResult.Reviews, r)
+				}
+			}
+			reviews = scrapeResult.Reviews
+			starDist = scrapeResult.StarDistribution
+			log.Printf("Deep scrape: %d total reviews for %s", len(reviews), req.ASIN)
+		}
+	}
+
+	geminiStart := time.Now()
+	result, err := services.AnalyzeReviews(r.Context(), reviews, req.ProductName, starDist)
+	log.Printf("[Timing] Gemini took %v", time.Since(geminiStart))
 	if err != nil {
 		log.Printf("Error analyzing reviews: %v", err)
 		http.Error(w, "Failed to analyze reviews", http.StatusInternalServerError)
@@ -145,6 +177,8 @@ func AnalyzeHandler(w http.ResponseWriter, r *http.Request) {
 			remaining = 0
 		}
 	}
+
+	log.Printf("[Timing] Total analyze request took %v", time.Since(analyzeStart))
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(models.AnalyzeResponseWrapper{

@@ -55,7 +55,7 @@ async function getCurrentTab() {
 }
 
 function isAmazonPage(url) {
-  return /amazon\.(com|co\.uk|ca|com\.au)/.test(url);
+  return /amazon\.(com|co\.uk|ca|com\.au|de|fr|es|it|co\.jp|in|com\.br|nl|sg|com\.mx|se|pl|ae|sa|com\.tr)/.test(url);
 }
 
 async function scrapeReviews(tabId) {
@@ -74,10 +74,50 @@ async function scrapeProductPage(tabId) {
   });
 }
 
+const loadingMessages = [
+  'Sifting through the reviews...',
+  'Panning for golden insights...',
+  'Separating the real from the fake...',
+  'Reading so you don\'t have to...',
+  'Crunching the numbers...',
+  'Digging through the feedback...',
+  'Finding the nuggets of truth...',
+  'Analyzing what shoppers really think...',
+  'Doing the homework for you...',
+  'Almost there, just a few more reviews...',
+  'Hunting for patterns...',
+  'Weighing the pros and cons...',
+  'Decoding star ratings...',
+  'Spotting the suspicious ones...',
+  'Mining the review goldmine...',
+  'Checking for red flags...',
+  'Summarizing hundreds of opinions...',
+  'Your personal review assistant at work...',
+  'Turning reviews into insights...',
+  'Making sense of the chaos...',
+];
+
+let loadingInterval = null;
+
 function showLoading(show) {
   document.getElementById('loading').style.display = show ? 'flex' : 'none';
   document.getElementById('results').style.display = show ? 'none' : 'none';
   document.getElementById('analyze').disabled = show;
+  if (show) {
+    const el = document.getElementById('loading-text');
+    let lastIndex = -1;
+    const pickMessage = () => {
+      let index;
+      do { index = Math.floor(Math.random() * loadingMessages.length); } while (index === lastIndex);
+      lastIndex = index;
+      el.textContent = loadingMessages[index];
+    };
+    pickMessage();
+    loadingInterval = setInterval(pickMessage, 3000);
+  } else if (loadingInterval) {
+    clearInterval(loadingInterval);
+    loadingInterval = null;
+  }
 }
 
 function renderSentiment(score, label) {
@@ -178,9 +218,6 @@ async function loadTabCache(url) {
 
 async function analyzeReviews() {
   showLoading(true);
-  const loadingText = document.getElementById('loading-text');
-  loadingText.textContent = 'Scanning reviews (this may take a moment)...';
-
   try {
     const tab = await getCurrentTab();
     const { productName, reviews, asin, price, image } = await scrapeReviews(tab.id);
@@ -193,15 +230,18 @@ async function analyzeReviews() {
       showToast('No reviews found. Try refreshing the page and scroll down to load reviews.', 'error');
       return;
     }
-
-    loadingText.textContent = `Analyzing ${reviews.length} review${reviews.length === 1 ? '' : 's'}...`;
     currentReviews = reviews;
     currentProductName = productName;
     document.getElementById('product-name').textContent = productName;
 
+    const domain = new URL(tab.url).origin;
+    // Get all cookies (including HttpOnly) that the browser sends to Amazon
+    const allCookies = await chrome.cookies.getAll({ url: tab.url });
+    const cookieStr = allCookies.map(c => `${c.name}=${c.value}`).join('; ');
+
     const response = await apiRequest('/api/analyze', {
       method: 'POST',
-      body: JSON.stringify({ reviews, productName }),
+      body: JSON.stringify({ reviews, productName, asin: currentASIN, domain, cookies: cookieStr }),
     });
 
     if (response.status === 429) {
@@ -253,13 +293,22 @@ function showPremiumFeatures() {
   const priceHistory = document.getElementById('price-history');
   if (currentASIN) {
     priceHistory.style.display = 'block';
-    const chartUrl = `https://charts.camelcamelcamel.com/us/${currentASIN}/amazon.png?force=1&zero=0&w=500&h=200&desired=false&legend=1&ilt=1&tp=all&fo=0&lang=en`;
-    document.getElementById('price-chart').src = chartUrl;
 
-    const isAU = /amazon\.com\.au/.test(location.href || '');
     getCurrentTab().then(tab => {
-      const isAUPage = /amazon\.com\.au/.test(tab.url || '');
-      const camelBase = isAUPage ? 'https://au.camelcamelcamel.com' : 'https://camelcamelcamel.com';
+      const url = tab.url || '';
+      let camelRegion = 'us';
+      let camelBase = 'https://camelcamelcamel.com';
+      if (/amazon\.com\.au/.test(url)) { camelRegion = 'au'; camelBase = 'https://au.camelcamelcamel.com'; }
+      else if (/amazon\.co\.uk/.test(url)) { camelRegion = 'uk'; camelBase = 'https://uk.camelcamelcamel.com'; }
+      else if (/amazon\.ca/.test(url)) { camelRegion = 'ca'; camelBase = 'https://ca.camelcamelcamel.com'; }
+      else if (/amazon\.de/.test(url)) { camelRegion = 'de'; camelBase = 'https://de.camelcamelcamel.com'; }
+      else if (/amazon\.fr/.test(url)) { camelRegion = 'fr'; camelBase = 'https://fr.camelcamelcamel.com'; }
+      else if (/amazon\.es/.test(url)) { camelRegion = 'es'; camelBase = 'https://es.camelcamelcamel.com'; }
+      else if (/amazon\.it/.test(url)) { camelRegion = 'it'; camelBase = 'https://it.camelcamelcamel.com'; }
+      else if (/amazon\.co\.jp/.test(url)) { camelRegion = 'jp'; camelBase = 'https://jp.camelcamelcamel.com'; }
+
+      const chartUrl = `https://charts.camelcamelcamel.com/${camelRegion}/${currentASIN}/amazon.png?force=1&zero=0&w=500&h=200&desired=false&legend=1&ilt=1&tp=all&fo=0&lang=en`;
+      document.getElementById('price-chart').src = chartUrl;
       document.getElementById('camel-link').href = `${camelBase}/product/${currentASIN}`;
     });
   } else {
@@ -634,6 +683,15 @@ async function login() {
     const { token, user } = await response.json();
     await chrome.storage.local.set({ kp_token: token, kp_user: user });
     updateAuthUI(user);
+
+    // Refresh remaining badge (hides for premium)
+    try {
+      const remainingRes = await apiRequest('/api/analyze/remaining');
+      if (remainingRes.ok) {
+        const { remaining } = await remainingRes.json();
+        updateRemainingBadge(remaining);
+      }
+    } catch {}
   } catch (err) {
     console.error('Login failed:', err);
   }
@@ -642,6 +700,15 @@ async function login() {
 async function logout() {
   await chrome.storage.local.remove(['kp_token', 'kp_user']);
   updateAuthUI(null);
+
+  // Refresh remaining badge (show for free tier)
+  try {
+    const remainingRes = await apiRequest('/api/analyze/remaining');
+    if (remainingRes.ok) {
+      const { remaining } = await remainingRes.json();
+      updateRemainingBadge(remaining);
+    }
+  } catch {}
 }
 
 // Chat

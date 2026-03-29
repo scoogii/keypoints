@@ -1,5 +1,7 @@
 package models
 
+import "encoding/json"
+
 type Review struct {
 	Title    string `json:"title"`
 	Rating   int    `json:"rating"`
@@ -10,10 +12,28 @@ type Review struct {
 type AnalyzeRequest struct {
 	Reviews     []Review `json:"reviews"`
 	ProductName string   `json:"productName"`
+	ASIN        string   `json:"asin,omitempty"`
+	Domain      string   `json:"domain,omitempty"`
+	Cookies     string   `json:"cookies,omitempty"`
 }
 
 type ProCon struct {
 	Point string `json:"point"`
+}
+
+func (p *ProCon) UnmarshalJSON(data []byte) error {
+	var s string
+	if err := json.Unmarshal(data, &s); err == nil {
+		p.Point = s
+		return nil
+	}
+	type plain ProCon
+	var v plain
+	if err := json.Unmarshal(data, &v); err != nil {
+		return err
+	}
+	*p = ProCon(v)
+	return nil
 }
 
 type FakeReviewFlag struct {

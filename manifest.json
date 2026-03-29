@@ -18,13 +18,54 @@
   "version": "1.0",
   "permissions": [
     "activeTab",
-    "scripting",
     "identity",
-    "storage"
+    "storage",
+    "cookies"
+  ],
+  "host_permissions": [
+    "*://*.amazon.com/*",
+    "*://*.amazon.co.uk/*",
+    "*://*.amazon.ca/*",
+    "*://*.amazon.com.au/*",
+    "*://*.amazon.de/*",
+    "*://*.amazon.fr/*",
+    "*://*.amazon.es/*",
+    "*://*.amazon.it/*",
+    "*://*.amazon.co.jp/*",
+    "*://*.amazon.in/*",
+    "*://*.amazon.com.br/*",
+    "*://*.amazon.nl/*",
+    "*://*.amazon.sg/*",
+    "*://*.amazon.com.mx/*",
+    "*://*.amazon.se/*",
+    "*://*.amazon.pl/*",
+    "*://*.amazon.ae/*",
+    "*://*.amazon.sa/*",
+    "*://*.amazon.com.tr/*"
   ],
   "content_scripts": [
     {
-      "matches": ["*://*.amazon.com/*", "*://*.amazon.co.uk/*", "*://*.amazon.ca/*", "*://*.amazon.com.au/*"],
+      "matches": [
+          "*://*.amazon.com/*",
+          "*://*.amazon.co.uk/*",
+          "*://*.amazon.ca/*",
+          "*://*.amazon.com.au/*",
+          "*://*.amazon.de/*",
+          "*://*.amazon.fr/*",
+          "*://*.amazon.es/*",
+          "*://*.amazon.it/*",
+          "*://*.amazon.co.jp/*",
+          "*://*.amazon.in/*",
+          "*://*.amazon.com.br/*",
+          "*://*.amazon.nl/*",
+          "*://*.amazon.sg/*",
+          "*://*.amazon.com.mx/*",
+          "*://*.amazon.se/*",
+          "*://*.amazon.pl/*",
+          "*://*.amazon.ae/*",
+          "*://*.amazon.sa/*",
+          "*://*.amazon.com.tr/*"
+        ],
       "js": ["content.js"]
     }
   ]

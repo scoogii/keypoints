@@ -7,50 +7,57 @@ import (
 	"math/rand/v2"
 	"os"
 	"strings"
+	"time"
 
-	"github.com/google/generative-ai-go/genai"
+	oldgenai "github.com/google/generative-ai-go/genai"
 	"github.com/scoogii/keypoints-backend/models"
 	"google.golang.org/api/option"
+	newgenai "google.golang.org/genai"
 )
 
-func AnalyzeReviews(ctx context.Context, reviews []models.Review, productName string) (*models.AnalyzeResponse, error) {
+func AnalyzeReviews(ctx context.Context, reviews []models.Review, productName string, starDist map[int]int) (*models.AnalyzeResponse, error) {
 	apiKey := os.Getenv("GEMINI_API_KEY")
 	if apiKey == "" {
 		return nil, fmt.Errorf("GEMINI_API_KEY environment variable is not set")
 	}
 
-	client, err := genai.NewClient(ctx, option.WithAPIKey(apiKey))
+	client, err := newgenai.NewClient(ctx, &newgenai.ClientConfig{
+		APIKey:  apiKey,
+		Backend: newgenai.BackendGeminiAPI,
+	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to create Gemini client: %w", err)
 	}
-	defer client.Close()
-
-	model := client.GenerativeModel("gemini-2.5-flash")
-	model.SetTemperature(0.3)
 
 	totalCount := len(reviews)
-	sampled := sampleReviews(reviews, 250)
-	prompt := buildAnalyzePrompt(sampled, totalCount, productName)
+	sampled := sampleReviews(reviews, 50)
+	prompt := buildAnalyzePrompt(sampled, totalCount, productName, starDist)
 
-	resp, err := model.GenerateContent(ctx, genai.Text(prompt))
+	geminiCtx, geminiCancel := context.WithTimeout(ctx, 30*time.Second)
+	defer geminiCancel()
+
+	temp := float32(0.3)
+	thinkingBudget := int32(0)
+	resp, err := client.Models.GenerateContent(geminiCtx, "gemini-2.5-flash",
+		[]*newgenai.Content{{Parts: []*newgenai.Part{{Text: prompt}}}},
+		&newgenai.GenerateContentConfig{
+			Temperature:  &temp,
+			ThinkingConfig: &newgenai.ThinkingConfig{
+				ThinkingBudget: &thinkingBudget,
+			},
+		},
+	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate content: %w", err)
 	}
 
-	if len(resp.Candidates) == 0 || len(resp.Candidates[0].Content.Parts) == 0 {
-		return nil, fmt.Errorf("empty response from Gemini")
-	}
+	respText := resp.Text()
 
-	text, ok := resp.Candidates[0].Content.Parts[0].(genai.Text)
-	if !ok {
-		return nil, fmt.Errorf("unexpected response type from Gemini")
-	}
-
-	jsonStr := extractJSON(string(text))
+	jsonStr := extractJSON(respText)
 
 	var result models.AnalyzeResponse
 	if err := json.Unmarshal([]byte(jsonStr), &result); err != nil {
-		return nil, fmt.Errorf("failed to parse Gemini response as JSON: %w\nraw response: %s", err, string(text))
+		return nil, fmt.Errorf("failed to parse Gemini response as JSON: %w\nraw response: %s", err, respText)
 	}
 
 	return &result, nil
@@ -62,7 +69,7 @@ func Chat(ctx context.Context, reviews []models.Review, productName string, prod
 		return "", fmt.Errorf("GEMINI_API_KEY environment variable is not set")
 	}
 
-	client, err := genai.NewClient(ctx, option.WithAPIKey(apiKey))
+	client, err := oldgenai.NewClient(ctx, option.WithAPIKey(apiKey))
 	if err != nil {
 		return "", fmt.Errorf("failed to create Gemini client: %w", err)
 	}
@@ -73,7 +80,7 @@ func Chat(ctx context.Context, reviews []models.Review, productName string, prod
 
 	prompt := buildChatPrompt(reviews, productName, productDetails, question)
 
-	resp, err := model.GenerateContent(ctx, genai.Text(prompt))
+	resp, err := model.GenerateContent(ctx, oldgenai.Text(prompt))
 	if err != nil {
 		return "", fmt.Errorf("failed to generate content: %w", err)
 	}
@@ -82,7 +89,7 @@ func Chat(ctx context.Context, reviews []models.Review, productName string, prod
 		return "", fmt.Errorf("empty response from Gemini")
 	}
 
-	text, ok := resp.Candidates[0].Content.Parts[0].(genai.Text)
+	text, ok := resp.Candidates[0].Content.Parts[0].(oldgenai.Text)
 	if !ok {
 		return "", fmt.Errorf("unexpected response type from Gemini")
 	}
@@ -164,13 +171,24 @@ func sampleReviews(reviews []models.Review, maxSample int) []models.Review {
 	return sampled
 }
 
-func buildAnalyzePrompt(reviews []models.Review, totalReviewCount int, productName string) string {
+func buildAnalyzePrompt(reviews []models.Review, totalReviewCount int, productName string, starDist map[int]int) string {
 	var sb strings.Builder
 
 	if len(reviews) < totalReviewCount {
 		sb.WriteString(fmt.Sprintf("Analyze the following representative sample of %d reviews (from %d total) for the Amazon product \"%s\".\n\n", len(reviews), totalReviewCount, productName))
 	} else {
 		sb.WriteString(fmt.Sprintf("Analyze the following %d Amazon product reviews for \"%s\".\n\n", len(reviews), productName))
+	}
+
+	// Include actual star distribution for accurate sentiment calculation
+	if len(starDist) > 0 {
+		sb.WriteString("ACTUAL STAR RATING DISTRIBUTION (use this for sentiment score, NOT the sample distribution):\n")
+		for star := 5; star >= 1; star-- {
+			if pct, ok := starDist[star]; ok {
+				sb.WriteString(fmt.Sprintf("  %d star: %d%%\n", star, pct))
+			}
+		}
+		sb.WriteString("NOTE: The reviews below are intentionally sampled equally across star levels to give you diverse material for pros, cons, and fake detection. Base the sentimentScore on the ACTUAL distribution above, not the sample.\n\n")
 	}
 
 	sb.WriteString("Reviews:\n")
@@ -196,9 +214,9 @@ func buildAnalyzePrompt(reviews []models.Review, totalReviewCount int, productNa
 Instructions:
 - "pros": Top 3-5 most mentioned positives. Keep each point to one short sentence. ONLY include points explicitly stated in reviews.
 - "cons": Top 3-5 most mentioned negatives. Keep each point to one short sentence. ONLY include points explicitly stated in reviews.
-- "sentimentScore": Overall sentiment from 0 (very negative) to 100 (very positive) based on all reviews.
+- "sentimentScore": Overall sentiment from 0 (very negative) to 100 (very positive). If a star distribution is provided above, calculate as: ((5star%×100 + 4star%×75 + 3star%×50 + 2star%×25 + 1star%×0) / 100). For example, 83% 5-star, 9% 4-star, 3% 3-star, 1% 2-star, 4% 1-star = (83×100+9×75+3×50+1×25+4×0)/100 = 90. Round to nearest integer.
 - "sentimentLabel": One of "Very Negative" (0-20), "Negative" (21-40), "Mixed" (41-60), "Positive" (61-80), "Very Positive" (81-100).
-- "summary": A 1-3 sentence summary of the overall review consensus. Be clear and concise. ONLY state what reviewers actually said — do NOT invent or assume anything.
+- "summary": Start with one brief sentence describing what the product is, then 1-2 sentences summarizing the overall review consensus. Be clear and concise. ONLY state what reviewers actually said — do NOT invent or assume anything.
 - "fakeReviewFlags": Only flag reviews with HIGH confidence (>0.7) of being fake. Look for: generic/vague language, incentivized reviews, identical phrasing. Maximum 3 flags. If none are clearly suspicious, return an empty array. Do NOT flag reviews just for being short or having strong opinions.
 - "categoryHighlights": Maximum 3-4 categories. Each category should have 2-3 concise points maximum. Only include categories clearly discussed in reviews.
 - CRITICAL: Do NOT invent, assume, or hallucinate any information. Every point must be directly supported by the review text provided.

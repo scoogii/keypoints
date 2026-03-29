@@ -11,7 +11,7 @@ Sift is a Chrome extension (Manifest V3) that uses AI to analyze Amazon product 
 - **Extension**: Chrome Manifest V3, vanilla JavaScript (no framework)
 - **Backend**: Go (stdlib net/http), no framework
 - **Database**: PostgreSQL (via github.com/lib/pq)
-- **AI**: Google Gemini 2.5 Flash (via github.com/google/generative-ai-go)
+- **AI**: Google Gemini 2.5 Flash (via google.golang.org/genai for analysis, github.com/google/generative-ai-go for chat)
 - **Payments**: Stripe (via github.com/stripe/stripe-go/v82)
 - **Auth**: Google OAuth 2.0 + JWT (via github.com/golang-jwt/jwt/v5)
 
@@ -46,6 +46,7 @@ sift/
     │
     ├── services/
     │   ├── gemini.go      # Gemini AI integration (AnalyzeReviews, Chat)
+    │   ├── scraper.go     # Amazon review scraper using headless Chrome (chromedp)
     │   ├── db.go          # PostgreSQL database (InitDB, user CRUD, rate limiting)
     │   ├── auth.go        # Google OAuth verification, JWT generation/validation
     │   └── stripe.go      # Stripe checkout, portal, webhook handling
@@ -101,16 +102,17 @@ sift/
 ### Analysis Flow (Free Tier)
 1. User clicks "Analyze Reviews" in popup
 2. popup.js sends `scrapeReviews` message to content.js
-3. content.js scrapes on-page reviews from DOM (`[data-hook="review"]` elements), then fetches up to 1000 reviews by paginating through `/product-reviews/{ASIN}/` pages (5 pages fetched in parallel per batch, 200ms pause between batches, deduplication via title+body key)
+3. content.js scrapes on-page reviews from DOM (`[data-hook="review"]` elements)
 4. If no reviews found, shows error toast and does NOT count against rate limit
-5. popup.js sends all scraped reviews + productName to `POST /api/analyze`
+5. popup.js sends reviews + productName to `POST /api/analyze`
 6. Backend checks rate limit (5/24h rolling window by IP for free users, unlimited for premium)
-7. Backend samples reviews via stratified sampling (up to 250 reviews, proportional to star rating distribution) to keep Gemini prompts fast and cost-effective
-8. Backend sends sampled reviews to Gemini 2.5 Flash with structured JSON prompt (temperature 0.3), noting the total review count vs sample size
-9. Gemini returns analysis (summary, pros, cons, sentiment, fake flags, category highlights)
-10. Analysis logged to `analysis_logs` only after successful Gemini response
-11. Results rendered in popup, cached in `chrome.storage.local` (1hr expiry, keyed by ASIN)
-12. Remaining analyses badge updated from response
+7. Backend deep-scrapes Amazon review pages using headless Chrome (chromedp) with user's cookies for authentication, scraping reviews by star level in 5 parallel goroutines, clicking "Show more" buttons to load additional reviews. Falls back to on-page reviews if scraping fails
+8. Backend samples scraped reviews via stratified sampling (up to 50 reviews, proportional to star rating distribution) to keep Gemini prompts fast and cost-effective
+9. Backend sends sampled reviews to Gemini 2.5 Flash with thinking disabled (ThinkingBudget=0) and structured JSON prompt (temperature 0.3), noting the total review count vs sample size. Star distribution percentages are included so Gemini can calculate accurate sentiment scores
+10. Gemini returns analysis (summary, pros, cons, sentiment, fake flags, category highlights)
+11. Analysis logged to `analysis_logs` only after successful Gemini response
+12. Results rendered in popup, cached in `chrome.storage.local` (1hr expiry, keyed by ASIN)
+13. Remaining analyses badge updated from response
 
 ### Auth Flow
 1. User clicks "Sign in with Google"
@@ -191,13 +193,14 @@ Tables and index are auto-created in `services.InitDB()` with `CREATE TABLE IF N
    - Optionally extracts JWT from `Authorization` header to identify logged-in user
    - Reads `X-Install-ID` header for anonymous rate limiting
 2. **Rate limiting**: For non-premium users, queries `analysis_logs` table for analyses in the last 24 hours by IP and install ID (takes the higher count). Returns `429` if count ≥ 5
-3. **`services/gemini.go → AnalyzeReviews`**: Orchestrates the Gemini call
+3. **`services/scraper.go → ScrapeReviews`**: Deep scrapes Amazon review pages using headless Chrome (chromedp) with user's cookies. Opens 5 parallel browser tabs (one per star level), clicks "Show more reviews" buttons to load additional reviews, and scrapes star distribution percentages from the histogram. Returns merged reviews and star distribution map
+4. **`services/gemini.go → AnalyzeReviews`**: Orchestrates the Gemini call
    - **Stratified sampling** (`sampleReviews`): If more than 250 reviews are provided, groups reviews into buckets by star rating (1-5), then takes a proportional sample from each bucket (e.g., if 60% of reviews are 5-star, ~60% of the 250 sample will be 5-star). Each bucket is shuffled before sampling. Guarantees at least 1 review per non-empty bucket
    - **Prompt construction** (`buildAnalyzePrompt`): Builds a text prompt listing each sampled review with title, rating, verified status, and body. If sampling occurred, tells Gemini it's a "representative sample of N reviews (from M total)". Appends strict JSON schema and instructions for pros, cons, sentiment, fake review flags, and category highlights
    - **Gemini call**: Uses `gemini-2.5-flash` model at temperature 0.3. Sends prompt as `genai.Text`
    - **Response parsing** (`extractJSON`): Strips any markdown code fences from Gemini's response, then unmarshals JSON into `AnalyzeResponse` struct
-4. **Logging**: On success, inserts a row into `analysis_logs` with IP, install ID, and optional user ID
-5. **Response**: Returns `AnalyzeResponse` JSON (pros, cons, sentimentScore, sentimentLabel, summary, fakeReviewFlags, categoryHighlights) plus `remainingAnalyses` count
+5. **Logging**: On success, inserts a row into `analysis_logs` with IP, install ID, and optional user ID
+6. **Response**: Returns `AnalyzeResponse` JSON (pros, cons, sentimentScore, sentimentLabel, summary, fakeReviewFlags, categoryHighlights) plus `remainingAnalyses` count
 
 ### Chat (`POST /api/chat`)
 
@@ -213,7 +216,7 @@ Tables and index are auto-created in `services.InitDB()` with `CREATE TABLE IF N
 
 ### Gemini Prompt Details
 
-- **Analyze prompt** (temperature 0.3): Requests structured JSON with pros (3-5), cons (3-5), sentiment score (0-100), sentiment label, summary (1-3 sentences), fake review flags (max 3, confidence > 0.7), and category highlights (max 3-4). Has a `CRITICAL` anti-hallucination instruction
+- **Analyze prompt** (temperature 0.3, thinking disabled): Uses new SDK (google.golang.org/genai) with ThinkingBudget=0 for speed. Requests structured JSON with pros (3-5), cons (3-5), sentiment score (calculated from star distribution formula), sentiment label, summary (product description + review consensus), fake review flags (max 3, confidence > 0.7), and category highlights (max 3-4). Has a `CRITICAL` anti-hallucination instruction
 - **Chat prompt** (temperature 0.5): Includes full product information (price, rating, features, description, specs, manufacturer info) plus all reviews. Rules forbid making up information not in the provided data
 - **Fake review detection**: Entirely prompt-driven (no algorithmic detection). Gemini looks for generic/vague language, incentivized reviews, and identical phrasing. Only flags with > 0.7 confidence. Will not flag reviews just for being short or opinionated
 
@@ -223,7 +226,6 @@ The content script (`content.js`) runs on Amazon product pages (`.com`, `.co.uk`
 
 - **scrapeProductName()**: `#productTitle`
 - **scrapeReviews()**: `[data-hook="review"]` elements on current page → title, body, rating (parsed from star rating text), verified (via `avp-badge`)
-- **scrapeAllReviews(asin, maxReviews)**: Starts with on-page reviews, then fetches `/product-reviews/{ASIN}/?sortBy=recent&pageNumber=N` pages in parallel batches of 5 (up to 1000 reviews). Deduplicates via title+body key, stops after 2 consecutive empty batches. 200ms pause between batches.
 - **scrapeASIN()**: URL pattern `/dp/{ASIN}` or `/gp/product/{ASIN}`, fallback `input[name="ASIN"]`
 - **scrapePrice()**: `.a-price .a-offscreen`, fallbacks `#priceblock_ourprice`, `#priceblock_dealprice`, `.a-price-whole`
 - **scrapeImage()**: `#landingImage`, fallback `#imgBlkFront`
@@ -232,6 +234,7 @@ The content script (`content.js`) runs on Amazon product pages (`.com`, `.co.uk`
 Two message actions:
 - `scrapeReviews`: Returns `{ productName, reviews, asin, price, image }`
 - `scrapeProductPage`: Returns all above + `productDetails` (for chat context)
+- The extension also reads Amazon cookies via `chrome.cookies.getAll()` and passes them to the backend for authenticated deep scraping
 
 ## Premium Features (require login + active Stripe subscription)
 1. **AI Chat**: Ask questions about the full product page (grounded in provided data, anti-hallucination rules)
@@ -308,3 +311,7 @@ cd backend
 - **Compare is client-side only**: Product comparison does not use AI — it renders saved analysis data side-by-side with an auto-generated verdict
 - **Same-product comparison** is blocked by ASIN check
 - **Build outputs** go to `dist/` (gitignored) — never edit files in dist directly
+- **Deep scraping**: Backend uses chromedp (headless Chrome) to scrape Amazon review pages with user's cookies. Scrapes 5 star levels in parallel, clicks "Show more" buttons (up to 2 times per level). Requires Chrome/Chromium installed on the server
+- **Two Gemini SDKs**: Analysis uses `google.golang.org/genai` (new SDK, supports ThinkingConfig). Chat uses `github.com/google/generative-ai-go` (old SDK, aliased as `oldgenai`). Both use `gemini-2.5-flash`
+- **Sentiment formula**: When star distribution is available, sentiment is calculated as: (5star%×100 + 4star%×75 + 3star%×50 + 2star%×25 + 1star%×0) / 100
+- **ProCon flexible parsing**: The `ProCon` struct has a custom `UnmarshalJSON` that accepts both `"string"` and `{"point": "string"}` formats for compatibility across Gemini models
