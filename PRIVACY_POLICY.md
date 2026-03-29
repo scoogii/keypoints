@@ -14,6 +14,7 @@ Sift ("the Extension") is a Chrome extension that analyzes Amazon product review
 ### Information collected automatically
 - **IP address**: Used for rate limiting free-tier analyses (5 per day). Not stored permanently or linked to your identity.
 - **Analysis logs**: We log timestamps of analyses for rate limiting purposes. These logs contain your IP address and, if signed in, your user ID.
+- **Amazon cookies**: When you analyze a product, your Amazon session cookies are temporarily used to access the full set of reviews. These cookies are not stored on our servers and are only used during the analysis request.
 
 ### Information we do NOT collect
 - We do not collect browsing history, purchase history, or any Amazon account information.

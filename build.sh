@@ -2,7 +2,7 @@
 set -e
 
 PROD_API_BASE="${PROD_API_BASE:-https://api.example.com}"
-PROD_GOOGLE_CLIENT_ID="${PROD_GOOGLE_CLIENT_ID:-YOUR_PROD_CLIENT_ID}"
+PROD_GOOGLE_CLIENT_ID="${PROD_GOOGLE_CLIENT_ID:-420667401546-nu9ousj8ri77tdd0cisd3fll92640qpq.apps.googleusercontent.com}"
 
 # Parse args
 while [[ $# -gt 0 ]]; do

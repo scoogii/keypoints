@@ -36,7 +36,8 @@ sift/
 │
 └── backend/
     ├── main.go            # HTTP server entry point (:8080)
-    ├── go.mod             # Go module definition (go 1.25.0)
+    ├── go.mod             # Go module definition (go 1.26)
+    ├── Dockerfile         # Multi-stage Docker build (Go + Chromium for Railway)
     ├── .env               # Environment variables (gitignored)
     ├── dev.sh             # Dev startup script (Go + Stripe listener)
     │
@@ -264,7 +265,7 @@ Two message actions:
 ### Development Setup
 
 ```bash
-# Prerequisites: Go 1.25+, PostgreSQL, Stripe CLI
+# Prerequisites: Go 1.26+, PostgreSQL, Stripe CLI
 
 # Database
 createdb sift
@@ -290,11 +291,20 @@ cd backend
 # Or use env vars: PROD_API_BASE and PROD_GOOGLE_CLIENT_ID
 ```
 
+### Production Backend (Railway)
+
+The backend is deployed on [Railway](https://railway.app/) using a Dockerfile (`backend/Dockerfile`).
+
+- **Dockerfile**: Multi-stage build — Go 1.26 builder compiles the binary, then copies it to a `debian:bookworm-slim` image with Chromium installed (required for chromedp deep scraping)
+- **Root directory**: Set to `backend/` in Railway service settings so it finds the Dockerfile
+- **PORT**: Railway sets `PORT` automatically; the Go server reads it from env (defaults to 8080)
+- **Env vars**: Set all 7 in Railway dashboard: `DATABASE_URL`, `GEMINI_API_KEY`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_ID`, `JWT_SECRET`, `CORS_ALLOWED_ORIGIN`
+
 ### Production Backend Checklist
 - Set `CORS_ALLOWED_ORIGIN=chrome-extension://YOUR_EXTENSION_ID` (locks CORS to your published extension)
 - Set `JWT_SECRET` to a strong random secret (do NOT use the dev fallback)
 - Use Stripe live keys (`sk_live_...`) instead of test keys
-- Ensure HTTPS on the API domain
+- Ensure HTTPS on the API domain (Railway provides this automatically)
 - Set all 7 env vars in production
 
 ## Important Notes for LLMs
