@@ -820,6 +820,12 @@ button:active {
   box-shadow: 0 0 12px rgba(255, 255, 255, 0.15);
 }
 
+.compare-card-disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
 .compare-result-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -1018,6 +1024,11 @@ button:active {
 [data-theme="light"] .compare-result-product {
   background: #ffffff;
   border-color: rgba(0, 0, 0, 0.08);
+}
+
+[data-theme="light"] .compare-card-selected {
+  border-color: #007AFF !important;
+  box-shadow: 0 0 12px rgba(0, 122, 255, 0.2);
 }
 
 [data-theme="light"] .compare-card-name {

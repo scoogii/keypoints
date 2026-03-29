@@ -178,6 +178,8 @@ async function loadTabCache(url) {
 
 async function analyzeReviews() {
   showLoading(true);
+  const loadingText = document.getElementById('loading-text');
+  loadingText.textContent = 'Scanning reviews (this may take a moment)...';
 
   try {
     const tab = await getCurrentTab();
@@ -192,6 +194,7 @@ async function analyzeReviews() {
       return;
     }
 
+    loadingText.textContent = `Analyzing ${reviews.length} reviews...`;
     currentReviews = reviews;
     currentProductName = productName;
     document.getElementById('product-name').textContent = productName;
@@ -482,7 +485,9 @@ function toggleCompareSelection(index) {
 
   document.querySelectorAll('.compare-card').forEach(card => {
     const i = parseInt(card.dataset.index);
-    card.classList.toggle('compare-card-selected', selectedCompareIndices.includes(i));
+    const isSelected = selectedCompareIndices.includes(i);
+    card.classList.toggle('compare-card-selected', isSelected);
+    card.classList.toggle('compare-card-disabled', selectedCompareIndices.length >= 2 && !isSelected);
   });
 
   document.getElementById('run-compare').style.display =

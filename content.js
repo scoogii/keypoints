@@ -48,6 +48,96 @@ function scrapeReviews() {
   return reviews;
 }
 
+function parseReviewsFromHTML(html) {
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(html, 'text/html');
+  const reviews = [];
+
+  doc.querySelectorAll('[data-hook="review"]').forEach(el => {
+    const titleEl = el.querySelector('[data-hook="review-title"]');
+    const bodyEl = el.querySelector('[data-hook="review-body"]');
+    const ratingEl = el.querySelector('[data-hook="review-star-rating"], [data-hook="cmps-review-star-rating"]');
+    const verifiedEl = el.querySelector('[data-hook="avp-badge"]');
+
+    const title = titleEl ? titleEl.textContent.trim() : '';
+    const body = bodyEl ? bodyEl.textContent.trim() : '';
+    const ratingText = ratingEl ? ratingEl.textContent.trim() : '0';
+    const rating = parseInt(ratingText.match(/(\d)/)?.[1] || '0');
+    const verified = !!verifiedEl;
+
+    if (body) {
+      reviews.push({ title, rating, body, verified });
+    }
+  });
+
+  return reviews;
+}
+
+async function fetchReviewPage(url) {
+  try {
+    const resp = await fetch(url, { credentials: 'include' });
+    if (!resp.ok) return [];
+    const html = await resp.text();
+    return parseReviewsFromHTML(html);
+  } catch {
+    return [];
+  }
+}
+
+async function scrapeAllReviews(asin, maxReviews = 1000) {
+  const seen = new Set();
+  const allReviews = [];
+
+  const addReview = (r) => {
+    const key = r.title + '|' + r.body.substring(0, 100);
+    if (!seen.has(key)) {
+      seen.add(key);
+      allReviews.push(r);
+    }
+  };
+
+  // Start with on-page reviews
+  scrapeReviews().forEach(addReview);
+
+  const domain = window.location.origin;
+  const baseUrl = `${domain}/product-reviews/${asin}/ref=cm_cr_arp_d_viewopt_srt?sortBy=recent&pageNumber=`;
+  const BATCH_SIZE = 5;
+  let page = 1;
+  let done = false;
+
+  while (allReviews.length < maxReviews && !done) {
+    // Fetch a batch of pages in parallel
+    const urls = [];
+    for (let i = 0; i < BATCH_SIZE && page + i <= 200; i++) {
+      urls.push(baseUrl + (page + i));
+    }
+
+    const batchResults = await Promise.all(urls.map(fetchReviewPage));
+
+    let batchEmpty = true;
+    for (const pageReviews of batchResults) {
+      if (pageReviews.length > 0) batchEmpty = false;
+      for (const r of pageReviews) {
+        if (allReviews.length >= maxReviews) { done = true; break; }
+        addReview(r);
+      }
+      if (done) break;
+    }
+
+    // If an entire batch returned no reviews, we've run out
+    if (batchEmpty) break;
+
+    page += BATCH_SIZE;
+
+    // Brief pause between batches to avoid rate limiting
+    if (!done && allReviews.length < maxReviews) {
+      await new Promise(resolve => setTimeout(resolve, 200));
+    }
+  }
+
+  return allReviews;
+}
+
 function scrapeProductDetails() {
   const details = {};
 
@@ -97,21 +187,27 @@ function scrapeProductDetails() {
 // Listen for messages from popup
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.action === 'scrapeReviews') {
-    const productName = scrapeProductName();
-    const reviews = scrapeReviews();
     const asin = scrapeASIN();
+    const productName = scrapeProductName();
     const price = scrapePrice();
     const image = scrapeImage();
-    sendResponse({ productName, reviews, asin, price, image });
+
+    scrapeAllReviews(asin, 1000).then(reviews => {
+      sendResponse({ productName, reviews, asin, price, image });
+    });
+    return true;
   }
   if (request.action === 'scrapeProductPage') {
-    const productName = scrapeProductName();
-    const reviews = scrapeReviews();
     const asin = scrapeASIN();
+    const productName = scrapeProductName();
     const price = scrapePrice();
     const image = scrapeImage();
     const productDetails = scrapeProductDetails();
-    sendResponse({ productName, reviews, asin, price, image, productDetails });
+
+    scrapeAllReviews(asin, 1000).then(reviews => {
+      sendResponse({ productName, reviews, asin, price, image, productDetails });
+    });
+    return true;
   }
   return true;
 });

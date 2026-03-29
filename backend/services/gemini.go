@@ -90,7 +90,7 @@ func Chat(ctx context.Context, reviews []models.Review, productName string, prod
 func buildAnalyzePrompt(reviews []models.Review, productName string) string {
 	var sb strings.Builder
 
-	sb.WriteString(fmt.Sprintf("Analyze the following Amazon product reviews for \"%s\".\n\n", productName))
+	sb.WriteString(fmt.Sprintf("Analyze the following %d Amazon product reviews for \"%s\".\n\n", len(reviews), productName))
 
 	sb.WriteString("Reviews:\n")
 	for i, r := range reviews {
