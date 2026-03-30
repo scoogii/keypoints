@@ -717,9 +717,19 @@ function addChatMessage(text, role) {
   const container = document.getElementById('chat-messages');
   const div = document.createElement('div');
   div.className = `chat-message ${role}`;
-  div.textContent = text;
+  div.textContent = normalizeChatText(text);
   container.appendChild(div);
   container.scrollTop = container.scrollHeight;
+}
+
+function normalizeChatText(text) {
+  return String(text || '')
+    .replace(/\*\*(.*?)\*\*/g, '$1')
+    .replace(/\*(.*?)\*/g, '$1')
+    .replace(/`([^`]+)`/g, '$1')
+    .replace(/\r\n/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
 }
 
 function addTypingIndicator() {
@@ -763,7 +773,7 @@ async function restoreChatMessages() {
   messages.forEach(m => {
     const div = document.createElement('div');
     div.className = `chat-message ${m.role}`;
-    div.textContent = m.text;
+    div.textContent = normalizeChatText(m.text);
     container.appendChild(div);
   });
   container.scrollTop = container.scrollHeight;

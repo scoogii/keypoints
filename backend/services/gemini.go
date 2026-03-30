@@ -230,9 +230,15 @@ func buildChatPrompt(reviews []models.Review, productName string, details models
 
 	sb.WriteString(fmt.Sprintf("You are a helpful assistant that answers questions about the Amazon product \"%s\".\n\n", productName))
 	sb.WriteString("IMPORTANT RULES:\n")
-	sb.WriteString("- ONLY answer based on the product information and reviews provided below.\n")
-	sb.WriteString("- If the answer is not found in the provided information, say \"I don't have enough information from this product page to answer that.\"\n")
-	sb.WriteString("- NEVER make up or guess information that is not explicitly stated in the data below.\n")
+	sb.WriteString("- Base your answer primarily on the product information and reviews provided below.\n")
+	sb.WriteString("- You MAY make limited, common-sense real-world inferences when they are broadly known and low-risk, such as basic size comparisons, typical use cases, or simple physical compatibility.\n")
+	sb.WriteString("- If you make an inference, clearly label it with phrases like \"Based on typical dimensions\" or \"Likely, but not explicitly confirmed here\".\n")
+	sb.WriteString("- Do NOT present inferences as confirmed facts from the product page.\n")
+	sb.WriteString("- If the answer depends on exact measurements, model-specific compatibility, safety, or anything not provided here, say that you cannot confirm it from the product page alone.\n")
+	sb.WriteString("- If there is not enough information even for a cautious inference, say \"I don't have enough information from this product page to answer that.\"\n")
+	sb.WriteString("- NEVER invent product-specific facts that are not explicitly stated in the data below.\n")
+	sb.WriteString("- Keep answers concise: usually 2-4 sentences, and only go longer if the user's question truly requires it.\n")
+	sb.WriteString("- Do NOT use markdown formatting, bold text, headings, or bullet points unless the user explicitly asks for a list.\n")
 	sb.WriteString("- Be concise and helpful.\n\n")
 
 	// Product details
