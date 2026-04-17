@@ -87,6 +87,15 @@ func GetAnalysisCountByInstallID(installID string) (int, error) {
 	return count, err
 }
 
+func GetAnalysisCountByUserID(userID string) (int, error) {
+	var count int
+	err := db.QueryRow(
+		"SELECT COUNT(*) FROM analysis_logs WHERE user_id = $1 AND created_at >= NOW() - INTERVAL '24 hours'",
+		userID,
+	).Scan(&count)
+	return count, err
+}
+
 func LogAnalysis(ip string, installID string, userID string) error {
 	var uid interface{}
 	if userID != "" {

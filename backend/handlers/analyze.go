@@ -31,10 +31,16 @@ func RemainingHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	clientIP := getClientIP(r)
+	installID := r.Header.Get("X-Install-ID")
+	if installID == "" {
+		http.Error(w, "Missing install ID", http.StatusBadRequest)
+		return
+	}
 	isPremium := false
+	userID := ""
 
 	if uid, err := middleware.GetUserFromRequest(r); err == nil {
+		userID = uid
 		if user, err := services.GetUserByID(uid); err == nil && user != nil {
 			isPremium = user.IsPremium
 		}
@@ -46,17 +52,17 @@ func RemainingHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	count, err := services.GetAnalysisCountLast24h(clientIP)
+	var count int
+	var err error
+	if userID != "" {
+		count, err = services.GetAnalysisCountByUserID(userID)
+	} else {
+		count, err = services.GetAnalysisCountByInstallID(installID)
+	}
 	if err != nil {
 		log.Printf("Error checking analysis count: %v", err)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
-	}
-
-	if installID := r.Header.Get("X-Install-ID"); installID != "" {
-		if installCount, err := services.GetAnalysisCountByInstallID(installID); err == nil && installCount > count {
-			count = installCount
-		}
 	}
 
 	remaining := 5 - count
@@ -88,6 +94,11 @@ func AnalyzeHandler(w http.ResponseWriter, r *http.Request) {
 	clientIP := getClientIP(r)
 	userID := ""
 	isPremium := false
+	installID := r.Header.Get("X-Install-ID")
+	if installID == "" {
+		http.Error(w, "Missing install ID", http.StatusBadRequest)
+		return
+	}
 
 	if uid, err := middleware.GetUserFromRequest(r); err == nil {
 		userID = uid
@@ -96,25 +107,18 @@ func AnalyzeHandler(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	installID := r.Header.Get("X-Install-ID")
-
 	var count int
 	if !isPremium {
 		var err error
-		count, err = services.GetAnalysisCountLast24h(clientIP)
+		if userID != "" {
+			count, err = services.GetAnalysisCountByUserID(userID)
+		} else {
+			count, err = services.GetAnalysisCountByInstallID(installID)
+		}
 		if err != nil {
 			log.Printf("Error checking analysis count: %v", err)
 			http.Error(w, "Internal server error", http.StatusInternalServerError)
 			return
-		}
-
-		if installID != "" {
-			installCount, err := services.GetAnalysisCountByInstallID(installID)
-			if err != nil {
-				log.Printf("Error checking install ID analysis count: %v", err)
-			} else if installCount > count {
-				count = installCount
-			}
 		}
 
 		if count >= 5 {

@@ -106,7 +106,7 @@ sift/
 3. content.js scrapes on-page reviews from DOM (`[data-hook="review"]` elements)
 4. If no reviews found, shows error toast and does NOT count against rate limit
 5. popup.js sends reviews + productName to `POST /api/analyze`
-6. Backend checks rate limit (5/24h rolling window by IP for free users, unlimited for premium)
+6. Backend checks rate limit (5/24h rolling window by install ID for anonymous users and by user ID for logged-in free users; premium users are unlimited)
 7. Backend deep-scrapes Amazon review pages using headless Chrome (chromedp) with user's cookies for authentication, scraping reviews by star level in 5 parallel goroutines, clicking "Show more" buttons to load additional reviews. Falls back to on-page reviews if scraping fails
 8. Backend samples scraped reviews via stratified sampling (up to 50 reviews, proportional to star rating distribution) to keep Gemini prompts fast and cost-effective
 9. Backend sends sampled reviews to Gemini 2.5 Flash with thinking disabled (ThinkingBudget=0) and structured JSON prompt (temperature 0.3), noting the total review count vs sample size. Star distribution percentages are included so Gemini can calculate accurate sentiment scores
@@ -177,11 +177,12 @@ sift/
 | Column | Type | Description |
 |--------|------|-------------|
 | id | UUID (PK) | Auto-generated via `uuid_generate_v4()` |
-| ip_address | TEXT NOT NULL | Client IP for rate limiting |
-| user_id | UUID (nullable) | User ID if logged in |
+| ip_address | TEXT NOT NULL | Client IP for logging/diagnostics |
+| install_id | TEXT NOT NULL | Anonymous extension install ID from `chrome.storage.local` |
+| user_id | UUID (nullable) | User ID if logged in; used for logged-in free-tier rate limiting |
 | created_at | TIMESTAMPTZ DEFAULT NOW() | Analysis timestamp |
 
-Index: `idx_analysis_logs_ip_created` on `(ip_address, created_at)`
+Indexes: `idx_analysis_logs_ip_created` on `(ip_address, created_at)`, `idx_analysis_logs_install_created` on `(install_id, created_at)`
 
 Tables and index are auto-created in `services.InitDB()` with `CREATE TABLE IF NOT EXISTS`.
 
@@ -190,10 +191,10 @@ Tables and index are auto-created in `services.InitDB()` with `CREATE TABLE IF N
 ### Analysis (`POST /api/analyze`)
 
 1. **`handlers/analyze.go → AnalyzeHandler`**: Receives JSON body with `reviews` array and `productName`
-   - Extracts client IP via `X-Forwarded-For` header (fallback `RemoteAddr`)
+   - Extracts client IP via `X-Forwarded-For` header (fallback `RemoteAddr`) for logging only
    - Optionally extracts JWT from `Authorization` header to identify logged-in user
-   - Reads `X-Install-ID` header for anonymous rate limiting
-2. **Rate limiting**: For non-premium users, queries `analysis_logs` table for analyses in the last 24 hours by IP and install ID (takes the higher count). Returns `429` if count ≥ 5
+   - Requires `X-Install-ID` header from the extension for anonymous rate limiting
+2. **Rate limiting**: For non-premium users, queries `analysis_logs` for analyses in the last 24 hours by user ID (if logged in) or install ID (if anonymous). Returns `429` if count ≥ 5
 3. **`services/scraper.go → ScrapeReviews`**: Deep scrapes Amazon review pages using headless Chrome (chromedp) with user's cookies. Opens 5 parallel browser tabs (one per star level), clicks "Show more reviews" buttons to load additional reviews, and scrapes star distribution percentages from the histogram. Returns merged reviews and star distribution map
 4. **`services/gemini.go → AnalyzeReviews`**: Orchestrates the Gemini call
    - **Stratified sampling** (`sampleReviews`): If more than 250 reviews are provided, groups reviews into buckets by star rating (1-5), then takes a proportional sample from each bucket (e.g., if 60% of reviews are 5-star, ~60% of the 250 sample will be 5-star). Each bucket is shuffled before sampling. Guarantees at least 1 review per non-empty bucket
@@ -211,8 +212,8 @@ Tables and index are auto-created in `services.InitDB()` with `CREATE TABLE IF N
 
 ### Rate Limiting (`services/db.go`)
 
-- **`GetAnalysisCountLast24h(ip)`**: Counts rows in `analysis_logs` where `ip_address` matches and `created_at` is within 24 hours
-- **`GetAnalysisCountByInstallID(installID)`**: Same but by `install_id` column — prevents circumvention by IP rotation
+- **`GetAnalysisCountByInstallID(installID)`**: Counts rows in `analysis_logs` where `install_id` matches and `created_at` is within 24 hours
+- **`GetAnalysisCountByUserID(userID)`**: Same but by `user_id` column for logged-in free users
 - **`LogAnalysis(ip, installID, userID)`**: Inserts a new log row. `userID` is inserted as NULL if empty
 
 ### Gemini Prompt Details
@@ -244,7 +245,7 @@ Two message actions:
 4. **Export**: Copy to clipboard or download `.txt` report
 
 ## Free Tier Limits
-- 5 analyses per rolling 24-hour window (tracked by IP via `analysis_logs` table)
+- 5 analyses per rolling 24-hour window (tracked by install ID for anonymous users, by user ID for logged-in free users)
 - Only successful analyses count (failed/no-reviews attempts are not logged)
 - Remaining count shown via badge on popup load (fetched from `GET /api/analyze/remaining`)
 - Premium users: unlimited analyses (remaining count returns -1, badge hidden)
@@ -316,7 +317,7 @@ The backend is deployed on [Railway](https://railway.app/) using a Dockerfile (`
 - **Gemini prompts** have strict anti-hallucination rules — do not remove them
 - **Stripe webhook** uses `IgnoreAPIVersionMismatch: true` due to SDK/API version differences
 - **UUID**: User IDs and log IDs are PostgreSQL UUID type via `uuid-ossp` extension; empty `user_id` inserts as NULL
-- **Rate limiting**: By IP using `analysis_logs` table with 24-hour rolling window; `X-Forwarded-For` header is respected; only successful analyses are counted
+- **Rate limiting**: By install ID for anonymous users and by user ID for logged-in free users using `analysis_logs` with a 24-hour rolling window; IP is logged for diagnostics only; only successful analyses are counted
 - **JWT fallback secret**: If `JWT_SECRET` env var is empty, defaults to `"sift-dev-secret"` — must be set in production
 - **Compare is client-side only**: Product comparison does not use AI — it renders saved analysis data side-by-side with an auto-generated verdict
 - **Same-product comparison** is blocked by ASIN check
