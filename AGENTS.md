@@ -23,7 +23,7 @@ sift/
 ├── popup.html             # Extension popup UI
 ├── popup.js               # Popup logic (auth, analysis, chat, compare, export)
 ├── popup.css              # Styling (dark/light theme, Apple-inspired)
-├── config.js              # Environment config (API_BASE, GOOGLE_CLIENT_ID)
+├── config.js              # Environment config (API_BASE)
 ├── content.js             # Content script (scrapes Amazon product pages)
 ├── build.sh               # Production build script (creates dist/ with prod config)
 ├── AGENTS.md              # This file
@@ -82,7 +82,6 @@ sift/
 | Constant | Dev Default | Production |
 |----------|-------------|------------|
 | `CONFIG.API_BASE` | `http://localhost:8080` | Your production API URL (HTTPS) |
-| `CONFIG.GOOGLE_CLIENT_ID` | Dev OAuth client ID | Production OAuth client ID |
 
 ## API Routes
 
@@ -117,13 +116,13 @@ sift/
 
 ### Auth Flow
 1. User clicks "Sign in with Google"
-2. popup.js uses `chrome.identity.launchWebAuthFlow` (implicit OAuth flow, `response_type=token`)
-3. Google returns access_token in redirect URL hash
-4. popup.js sends token to `POST /api/auth/google`
+2. popup.js calls `chrome.identity.getAuthToken({ interactive: true })` using the manifest `oauth2` client ID and scopes
+3. Chrome returns a Google access token for the extension's Chrome Extension OAuth client
+4. popup.js sends the token to `POST /api/auth/google`
 5. Backend calls Google userinfo API (`/oauth2/v2/userinfo`) to verify token
 6. Backend creates/finds user in PostgreSQL by google_id
 7. Backend generates JWT (30-day expiry, HS256) and returns with user info
-8. JWT stored in `chrome.storage.local` as `kp_token`, user info as `kp_user`
+8. JWT stored in `chrome.storage.local` as `kp_token`, user info as `kp_user`, and the Google token cached as `kp_google_token` for logout cleanup
 9. On popup open, `GET /api/auth/me` is called to refresh user state
 
 ### Premium Chat Flow
@@ -286,10 +285,10 @@ cd backend
 
 ```bash
 # Build extension zip with production config
-./build.sh --api https://your-api.com --client-id YOUR_PROD_GOOGLE_CLIENT_ID
+./build.sh --api https://your-api.com
 
 # Output: dist/sift-extension.zip (upload to Chrome Web Store)
-# Or use env vars: PROD_API_BASE and PROD_GOOGLE_CLIENT_ID
+# Or use env var: PROD_API_BASE
 ```
 
 ### Production Backend (Railway)
@@ -312,7 +311,8 @@ The backend is deployed on [Railway](https://railway.app/) using a Dockerfile (`
 
 - **Storage keys** use `kp_` prefix: `kp_token`, `kp_user`, `kp_theme`, `kp_cache_{ASIN}`, `kp_chat_{ASIN}`, `kp_comparisons`
 - **Go module** is `github.com/scoogii/keypoints-backend`
-- **Config** is in `config.js` (loaded before `popup.js`) — use `CONFIG.API_BASE` and `CONFIG.GOOGLE_CLIENT_ID`
+- **Config** is in `config.js` (loaded before `popup.js`) — use `CONFIG.API_BASE`
+- **Google OAuth for the extension** is declared in `manifest.json` under `oauth2` and should use a Google Cloud OAuth client of type **Chrome Extension**
 - **CORS** is configurable: set `CORS_ALLOWED_ORIGIN` env var for production, unset for dev mode
 - **Gemini prompts** have strict anti-hallucination rules — do not remove them
 - **Stripe webhook** uses `IgnoreAPIVersionMismatch: true` due to SDK/API version differences

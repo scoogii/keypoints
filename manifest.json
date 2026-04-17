@@ -2,6 +2,7 @@
   "manifest_version": 3,
   "name": "Sift - Amazon Review Analyzer",
   "description": "Amazon review summarizer with the help of an AI assistant",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA3WENTDv4lwwoDOsxWTVSPVsFWPHS6ImE/3dPChgvabahs3Ne1YYxluEg4Gpzygt13H5kO2dmcvTvaAVTrOK3PfQ4ZaHmeWxbMSKg76gDvPDexOr2c7ezQKmzLjwYslAlReA6EjBN1yCp+RbCik+Uyb6VjWPEhKcZEzsBfp6Z1ubDuyQvfr7PNPbEHwQsllgG1RruhAOHH+QM1WpYF+pbNhGVLQWK9vE5xudd5SncmeU2R2DHGQqmN1H35tYB5fWY4AzuXrCoXsELDO64OiC5nWkLbQXiTqNuxa8//z9JldgPpCE0Yu0rjxReLGViwgfG52hCYtsNz6pfX3Yn4FpggQIDAQAB",
   "action": {
     "default_popup": "popup.html",
     "default_icon": {
@@ -15,13 +16,20 @@
     "48": "icon48.png",
     "128": "icon128.png"
   },
-  "version": "1.0",
+  "version": "1.0.1",
   "permissions": [
     "activeTab",
     "identity",
     "storage",
     "cookies"
   ],
+  "oauth2": {
+    "client_id": "420667401546-nu9ousj8ri77tdd0cisd3fll92640qpq.apps.googleusercontent.com",
+    "scopes": [
+      "https://www.googleapis.com/auth/userinfo.email",
+      "https://www.googleapis.com/auth/userinfo.profile"
+    ]
+  },
   "host_permissions": [
     "*://*.amazon.com/*",
     "*://*.amazon.co.uk/*",

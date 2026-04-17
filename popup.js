@@ -653,23 +653,9 @@ function updateAuthUI(user) {
 }
 
 async function login() {
-  const redirectUri = chrome.identity.getRedirectURL();
-  const authUrl = new URL('https://accounts.google.com/o/oauth2/v2/auth');
-  authUrl.searchParams.set('client_id', CONFIG.GOOGLE_CLIENT_ID);
-  authUrl.searchParams.set('redirect_uri', redirectUri);
-  authUrl.searchParams.set('response_type', 'token');
-  authUrl.searchParams.set('scope', 'email profile');
-
   try {
-    const responseUrl = await chrome.identity.launchWebAuthFlow({
-      url: authUrl.toString(),
-      interactive: true,
-    });
-
-    const hash = new URL(responseUrl).hash.substring(1);
-    const params = new URLSearchParams(hash);
-    const accessToken = params.get('access_token');
-
+    const authResult = await chrome.identity.getAuthToken({ interactive: true });
+    const accessToken = typeof authResult === 'string' ? authResult : authResult?.token;
     if (!accessToken) throw new Error('No access token received');
 
     const response = await fetch(`${CONFIG.API_BASE}/api/auth/google`, {
@@ -681,7 +667,7 @@ async function login() {
     if (!response.ok) throw new Error('Authentication failed');
 
     const { token, user } = await response.json();
-    await chrome.storage.local.set({ kp_token: token, kp_user: user });
+    await chrome.storage.local.set({ kp_token: token, kp_user: user, kp_google_token: accessToken });
     updateAuthUI(user);
 
     // Refresh remaining badge (hides for premium)
@@ -694,11 +680,21 @@ async function login() {
     } catch {}
   } catch (err) {
     console.error('Login failed:', err);
+    showToast('Google sign-in failed. Please try again.', 'error');
   }
 }
 
 async function logout() {
-  await chrome.storage.local.remove(['kp_token', 'kp_user']);
+  const { kp_google_token } = await chrome.storage.local.get('kp_google_token');
+  if (kp_google_token) {
+    try {
+      await chrome.identity.removeCachedAuthToken({ token: kp_google_token });
+    } catch (err) {
+      console.warn('Failed to clear cached Google token:', err);
+    }
+  }
+
+  await chrome.storage.local.remove(['kp_token', 'kp_user', 'kp_google_token']);
   updateAuthUI(null);
 
   // Refresh remaining badge (show for free tier)
