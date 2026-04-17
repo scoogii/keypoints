@@ -239,11 +239,12 @@ Two message actions:
 
 ## Premium Features (require login + active Stripe subscription)
 1. **AI Chat**: Ask questions about the full product page (grounded in provided data, anti-hallucination rules)
-2. **Price History**: CamelCamelCamel chart embedded via ASIN (supports US and AU domains)
+2. **Price History**: An in-popup canvas graph is redrawn from the CamelCamelCamel Amazon chart asset for the current ASIN, while keeping a "View on CamelCamelCamel" link to the full page
 3. **Compare Mode**: Save up to 5 products, select 2 for side-by-side comparison with final verdict
 4. **Export**: Copy to clipboard or download `.txt` report
 5. **Premium gating pattern**: Premium features are always visible in the popup as preview cards. Non-premium users see locked overlays with upgrade CTAs instead of the features being hidden. Premium users see the same UI fully unlocked.
 6. **Logged-out CTA behavior**: Clicking a locked premium CTA while logged out starts the same Google sign-in flow as the main sign-in button, then continues into the Stripe upgrade flow after successful auth
+7. **Price history rendering**: `popup.js` fetches `https://charts.camelcamelcamel.com/.../amazon.png`, samples the Amazon price line, and redraws it into the extension's own `<canvas>` graph. `manifest.json` therefore includes `https://charts.camelcamelcamel.com/*` in `host_permissions`
 
 ## Free Tier Limits
 - 5 analyses per rolling 24-hour window (tracked by install ID for anonymous users, by user ID for logged-in free users)

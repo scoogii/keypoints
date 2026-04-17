@@ -5,6 +5,7 @@ let currentASIN = '';
 let currentPrice = '';
 let currentImage = '';
 let lastAnalysis = null;
+let priceHistoryRenderId = 0;
 
 function isPremiumUser(user) {
   return Boolean(user && user.isPremium);
@@ -131,6 +132,433 @@ async function scrapeProductPage(tabId) {
   });
 }
 
+function getCamelCamelCamelConfig(url, asin) {
+  let region = 'us';
+  let baseUrl = 'https://camelcamelcamel.com';
+  let marketLabel = 'Amazon US';
+
+  if (/amazon\.com\.au/.test(url)) {
+    region = 'au';
+    baseUrl = 'https://au.camelcamelcamel.com';
+    marketLabel = 'Amazon AU';
+  } else if (/amazon\.co\.uk/.test(url)) {
+    region = 'uk';
+    baseUrl = 'https://uk.camelcamelcamel.com';
+    marketLabel = 'Amazon UK';
+  } else if (/amazon\.ca/.test(url)) {
+    region = 'ca';
+    baseUrl = 'https://ca.camelcamelcamel.com';
+    marketLabel = 'Amazon CA';
+  } else if (/amazon\.de/.test(url)) {
+    region = 'de';
+    baseUrl = 'https://de.camelcamelcamel.com';
+    marketLabel = 'Amazon DE';
+  } else if (/amazon\.fr/.test(url)) {
+    region = 'fr';
+    baseUrl = 'https://fr.camelcamelcamel.com';
+    marketLabel = 'Amazon FR';
+  } else if (/amazon\.es/.test(url)) {
+    region = 'es';
+    baseUrl = 'https://es.camelcamelcamel.com';
+    marketLabel = 'Amazon ES';
+  } else if (/amazon\.it/.test(url)) {
+    region = 'it';
+    baseUrl = 'https://it.camelcamelcamel.com';
+    marketLabel = 'Amazon IT';
+  } else if (/amazon\.co\.jp/.test(url)) {
+    region = 'jp';
+    baseUrl = 'https://jp.camelcamelcamel.com';
+    marketLabel = 'Amazon JP';
+  }
+
+  return {
+    region,
+    baseUrl,
+    marketLabel,
+    chartUrl: `https://charts.camelcamelcamel.com/${region}/${asin}/amazon.png?force=1&zero=0&w=500&h=200&desired=false&legend=1&ilt=1&tp=all&fo=0&lang=en`,
+    camelUrl: `${baseUrl}/product/${asin}`,
+  };
+}
+
+function setPriceHistoryText(elementId, value) {
+  const element = document.getElementById(elementId);
+  if (element) {
+    element.textContent = value;
+  }
+}
+
+function formatDisplayPrice(price) {
+  return price ? `Now ${price}` : 'Current price unavailable';
+}
+
+function getPriceChartPalette() {
+  const isLight = document.documentElement.getAttribute('data-theme') === 'light';
+  if (isLight) {
+    return {
+      panelTop: 'rgba(255, 174, 66, 0.12)',
+      panelBottom: 'rgba(255, 255, 255, 0.94)',
+      grid: 'rgba(0, 0, 0, 0.08)',
+      text: 'rgba(29, 29, 31, 0.72)',
+      subtext: 'rgba(29, 29, 31, 0.5)',
+      line: '#d97706',
+      pointOuter: '#fff7ed',
+      pointInner: '#d97706',
+      areaTop: 'rgba(217, 119, 6, 0.22)',
+      areaBottom: 'rgba(217, 119, 6, 0.02)',
+    };
+  }
+
+  return {
+    panelTop: 'rgba(255, 174, 66, 0.14)',
+    panelBottom: 'rgba(255, 255, 255, 0.02)',
+    grid: 'rgba(255, 255, 255, 0.08)',
+    text: 'rgba(255, 255, 255, 0.72)',
+    subtext: 'rgba(255, 255, 255, 0.5)',
+    line: '#ffad42',
+    pointOuter: '#fff2d6',
+    pointInner: '#ffad42',
+    areaTop: 'rgba(255, 174, 66, 0.26)',
+    areaBottom: 'rgba(255, 174, 66, 0.02)',
+  };
+}
+
+function updatePriceHistorySummary(message, trend = 'Waiting for chart data...') {
+  setPriceHistoryText('price-history-status', message);
+  setPriceHistoryText('price-history-trend', trend);
+  setPriceHistoryText('price-history-current', formatDisplayPrice(currentPrice));
+}
+
+function resetPriceHistoryCanvas(message) {
+  const canvas = document.getElementById('price-chart');
+  if (!canvas) return;
+
+  const context = canvas.getContext('2d');
+  const width = canvas.width;
+  const height = canvas.height;
+  const palette = getPriceChartPalette();
+
+  context.clearRect(0, 0, width, height);
+
+  const gradient = context.createLinearGradient(0, 0, 0, height);
+  gradient.addColorStop(0, palette.panelTop);
+  gradient.addColorStop(1, palette.panelBottom);
+  context.fillStyle = gradient;
+  context.fillRect(0, 0, width, height);
+
+  context.strokeStyle = palette.grid;
+  context.lineWidth = 1;
+  for (let row = 1; row <= 4; row += 1) {
+    const y = Math.round((height / 5) * row) + 0.5;
+    context.beginPath();
+    context.moveTo(16, y);
+    context.lineTo(width - 16, y);
+    context.stroke();
+  }
+
+  context.fillStyle = palette.text;
+  context.font = '600 12px -apple-system, BlinkMacSystemFont, "SF Pro Display", sans-serif';
+  context.textAlign = 'center';
+  context.fillText(message, width / 2, height / 2);
+}
+
+function loadImageFromBlob(blob) {
+  return new Promise((resolve, reject) => {
+    const objectUrl = URL.createObjectURL(blob);
+    const image = new Image();
+    image.onload = () => {
+      URL.revokeObjectURL(objectUrl);
+      resolve(image);
+    };
+    image.onerror = () => {
+      URL.revokeObjectURL(objectUrl);
+      reject(new Error('Unable to decode chart image'));
+    };
+    image.src = objectUrl;
+  });
+}
+
+async function fetchCamelChartImage(chartUrl) {
+  const response = await fetch(chartUrl, { credentials: 'omit' });
+  if (!response.ok) {
+    throw new Error(`Chart request failed (${response.status})`);
+  }
+  const blob = await response.blob();
+  return loadImageFromBlob(blob);
+}
+
+function isCamelAmazonLinePixel(r, g, b, a) {
+  if (a < 180) return false;
+  return r >= 175 && g >= 85 && g <= 210 && b <= 120 && (r - b) >= 90 && (r - g) >= 10;
+}
+
+function interpolateMissingSeries(series, maxGap = 18) {
+  const output = [...series];
+  let previousIndex = -1;
+
+  for (let index = 0; index < output.length; index += 1) {
+    if (output[index] == null) continue;
+
+    if (previousIndex >= 0) {
+      const gap = index - previousIndex;
+      if (gap > 1 && gap <= maxGap) {
+        const start = output[previousIndex];
+        const end = output[index];
+        for (let offset = 1; offset < gap; offset += 1) {
+          const progress = offset / gap;
+          output[previousIndex + offset] = start + ((end - start) * progress);
+        }
+      }
+    }
+
+    previousIndex = index;
+  }
+
+  return output;
+}
+
+function resampleSeries(series, count = 36) {
+  if (!series.length) return [];
+
+  const points = [];
+  const maxIndex = series.length - 1;
+  for (let step = 0; step < count; step += 1) {
+    const position = (maxIndex * step) / Math.max(count - 1, 1);
+    const left = Math.floor(position);
+    const right = Math.min(maxIndex, Math.ceil(position));
+    const blend = position - left;
+    const leftValue = series[left];
+    const rightValue = series[right];
+    points.push(leftValue + ((rightValue - leftValue) * blend));
+  }
+
+  return points;
+}
+
+function extractSeriesFromCamelChart(image) {
+  const sourceCanvas = document.createElement('canvas');
+  sourceCanvas.width = image.naturalWidth || image.width;
+  sourceCanvas.height = image.naturalHeight || image.height;
+
+  const sourceContext = sourceCanvas.getContext('2d', { willReadFrequently: true });
+  sourceContext.drawImage(image, 0, 0);
+  const { data, width, height } = sourceContext.getImageData(0, 0, sourceCanvas.width, sourceCanvas.height);
+
+  const topBound = 12;
+  const bottomBound = height - 38;
+  const leftBound = 28;
+  const rightBound = width - 8;
+  const rawSeries = new Array(rightBound - leftBound).fill(null);
+
+  for (let x = leftBound; x < rightBound; x += 1) {
+    const matches = [];
+    for (let y = topBound; y < bottomBound; y += 1) {
+      const index = ((y * width) + x) * 4;
+      const r = data[index];
+      const g = data[index + 1];
+      const b = data[index + 2];
+      const a = data[index + 3];
+      if (isCamelAmazonLinePixel(r, g, b, a)) {
+        matches.push(y);
+      }
+    }
+
+    if (matches.length) {
+      rawSeries[x - leftBound] = matches[Math.floor(matches.length / 2)];
+    }
+  }
+
+  const filledSeries = interpolateMissingSeries(rawSeries).filter(value => value != null);
+  if (filledSeries.length < 24) {
+    throw new Error('Not enough chart data points');
+  }
+
+  const minY = Math.min(...filledSeries);
+  const maxY = Math.max(...filledSeries);
+  const range = Math.max(maxY - minY, 6);
+  const normalizedSeries = resampleSeries(filledSeries, 40).map(value => 1 - ((value - minY) / range));
+
+  return {
+    values: normalizedSeries,
+    firstValue: normalizedSeries[0],
+    lastValue: normalizedSeries[normalizedSeries.length - 1],
+    coverage: filledSeries.length / rawSeries.length,
+  };
+}
+
+function getTrendCopy(series) {
+  const delta = (series.lastValue - series.firstValue) * 100;
+  if (delta >= 8) return 'Price trend has climbed versus the left side of the chart.';
+  if (delta <= -8) return 'Price trend has cooled versus the left side of the chart.';
+  return 'Price trend looks relatively steady across the captured chart.';
+}
+
+function drawPriceHistoryGraph(series) {
+  const canvas = document.getElementById('price-chart');
+  if (!canvas) return;
+
+  const cssWidth = canvas.clientWidth || 392;
+  const cssHeight = 220;
+  const dpr = window.devicePixelRatio || 1;
+  const palette = getPriceChartPalette();
+  canvas.width = Math.round(cssWidth * dpr);
+  canvas.height = Math.round(cssHeight * dpr);
+
+  const context = canvas.getContext('2d');
+  context.setTransform(1, 0, 0, 1, 0, 0);
+  context.scale(dpr, dpr);
+  context.clearRect(0, 0, cssWidth, cssHeight);
+
+  const padding = { top: 18, right: 16, bottom: 22, left: 16 };
+  const plotWidth = cssWidth - padding.left - padding.right;
+  const plotHeight = cssHeight - padding.top - padding.bottom;
+
+  const backgroundGradient = context.createLinearGradient(0, 0, 0, cssHeight);
+  backgroundGradient.addColorStop(0, palette.panelTop);
+  backgroundGradient.addColorStop(1, palette.panelBottom);
+  context.fillStyle = backgroundGradient;
+  context.fillRect(0, 0, cssWidth, cssHeight);
+
+  context.strokeStyle = palette.grid;
+  context.lineWidth = 1;
+  for (let row = 0; row <= 4; row += 1) {
+    const y = padding.top + ((plotHeight / 4) * row);
+    context.beginPath();
+    context.moveTo(padding.left, Math.round(y) + 0.5);
+    context.lineTo(cssWidth - padding.right, Math.round(y) + 0.5);
+    context.stroke();
+  }
+
+  const points = series.values.map((value, index) => ({
+    x: padding.left + ((plotWidth * index) / Math.max(series.values.length - 1, 1)),
+    y: padding.top + ((1 - value) * plotHeight),
+  }));
+
+  const areaPath = new Path2D();
+  points.forEach((point, index) => {
+    if (index === 0) {
+      areaPath.moveTo(point.x, point.y);
+    } else {
+      areaPath.lineTo(point.x, point.y);
+    }
+  });
+  areaPath.lineTo(points[points.length - 1].x, cssHeight - padding.bottom);
+  areaPath.lineTo(points[0].x, cssHeight - padding.bottom);
+  areaPath.closePath();
+
+  const areaGradient = context.createLinearGradient(0, padding.top, 0, cssHeight - padding.bottom);
+  areaGradient.addColorStop(0, palette.areaTop);
+  areaGradient.addColorStop(1, palette.areaBottom);
+  context.fillStyle = areaGradient;
+  context.fill(areaPath);
+
+  context.strokeStyle = palette.line;
+  context.lineWidth = 2.5;
+  context.lineJoin = 'round';
+  context.lineCap = 'round';
+  context.beginPath();
+  points.forEach((point, index) => {
+    if (index === 0) {
+      context.moveTo(point.x, point.y);
+    } else {
+      context.lineTo(point.x, point.y);
+    }
+  });
+  context.stroke();
+
+  const lastPoint = points[points.length - 1];
+  context.fillStyle = palette.pointOuter;
+  context.beginPath();
+  context.arc(lastPoint.x, lastPoint.y, 4.5, 0, Math.PI * 2);
+  context.fill();
+
+  context.fillStyle = palette.pointInner;
+  context.beginPath();
+  context.arc(lastPoint.x, lastPoint.y, 2.5, 0, Math.PI * 2);
+  context.fill();
+
+  context.fillStyle = palette.subtext;
+  context.font = '11px -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif';
+  context.textAlign = 'left';
+  context.fillText('Earlier', padding.left, cssHeight - 7);
+  context.textAlign = 'right';
+  context.fillText('Now', cssWidth - padding.right, cssHeight - 7);
+}
+
+function drawCamelChartFallback(image) {
+  const canvas = document.getElementById('price-chart');
+  if (!canvas) return;
+
+  const cssWidth = canvas.clientWidth || 392;
+  const cssHeight = 220;
+  const dpr = window.devicePixelRatio || 1;
+  const palette = getPriceChartPalette();
+  canvas.width = Math.round(cssWidth * dpr);
+  canvas.height = Math.round(cssHeight * dpr);
+
+  const context = canvas.getContext('2d');
+  context.setTransform(1, 0, 0, 1, 0, 0);
+  context.scale(dpr, dpr);
+  context.clearRect(0, 0, cssWidth, cssHeight);
+
+  const backgroundGradient = context.createLinearGradient(0, 0, 0, cssHeight);
+  backgroundGradient.addColorStop(0, palette.panelTop);
+  backgroundGradient.addColorStop(1, palette.panelBottom);
+  context.fillStyle = backgroundGradient;
+  context.fillRect(0, 0, cssWidth, cssHeight);
+
+  context.globalAlpha = 0.94;
+  context.drawImage(image, 0, 0, cssWidth, cssHeight);
+  context.globalAlpha = 1;
+}
+
+async function renderPriceHistory() {
+  const priceHistory = document.getElementById('price-history');
+  if (!priceHistory) return;
+
+  if (!currentASIN) {
+    priceHistory.style.display = 'none';
+    return;
+  }
+
+  priceHistory.style.display = 'block';
+  updatePriceHistorySummary('Loading price history from CamelCamelCamel...');
+  resetPriceHistoryCanvas('Loading chart...');
+
+  const renderId = ++priceHistoryRenderId;
+  const tab = await getCurrentTab();
+  const config = getCamelCamelCamelConfig(tab.url || '', currentASIN);
+  document.getElementById('camel-link').href = config.camelUrl;
+  setPriceHistoryText('price-history-market', config.marketLabel);
+  setPriceHistoryText('price-history-current', formatDisplayPrice(currentPrice));
+
+  try {
+    const chartImage = await fetchCamelChartImage(config.chartUrl);
+    if (renderId !== priceHistoryRenderId) return;
+
+    try {
+      const series = extractSeriesFromCamelChart(chartImage);
+      drawPriceHistoryGraph(series);
+      updatePriceHistorySummary(
+        `Built from CamelCamelCamel's Amazon line for ${config.marketLabel}.`,
+        getTrendCopy(series),
+      );
+    } catch (error) {
+      drawCamelChartFallback(chartImage);
+      updatePriceHistorySummary(
+        `Showing CamelCamelCamel reference history for ${config.marketLabel}.`,
+        'Open the full CamelCamelCamel page for the complete interactive history.',
+      );
+    }
+  } catch (error) {
+    if (renderId !== priceHistoryRenderId) return;
+    resetPriceHistoryCanvas('Chart unavailable');
+    updatePriceHistorySummary(
+      'We could not render this price history right now.',
+      'Open the full CamelCamelCamel page for the complete interactive history.',
+    );
+  }
+}
+
 const loadingMessages = [
   'Sifting through the reviews...',
   'Panning for golden insights...',
@@ -158,7 +586,7 @@ let loadingInterval = null;
 
 function showLoading(show) {
   document.getElementById('loading').style.display = show ? 'flex' : 'none';
-  document.getElementById('results').style.display = show ? 'none' : 'none';
+  document.getElementById('results').style.display = show ? 'none' : 'block';
   document.getElementById('analyze').disabled = show;
   if (show) {
     const el = document.getElementById('loading-text');
@@ -348,25 +776,7 @@ function showPremiumFeatures(isPremium = false) {
 
   const priceHistory = document.getElementById('price-history');
   if (currentASIN) {
-    priceHistory.style.display = 'block';
-
-    getCurrentTab().then(tab => {
-      const url = tab.url || '';
-      let camelRegion = 'us';
-      let camelBase = 'https://camelcamelcamel.com';
-      if (/amazon\.com\.au/.test(url)) { camelRegion = 'au'; camelBase = 'https://au.camelcamelcamel.com'; }
-      else if (/amazon\.co\.uk/.test(url)) { camelRegion = 'uk'; camelBase = 'https://uk.camelcamelcamel.com'; }
-      else if (/amazon\.ca/.test(url)) { camelRegion = 'ca'; camelBase = 'https://ca.camelcamelcamel.com'; }
-      else if (/amazon\.de/.test(url)) { camelRegion = 'de'; camelBase = 'https://de.camelcamelcamel.com'; }
-      else if (/amazon\.fr/.test(url)) { camelRegion = 'fr'; camelBase = 'https://fr.camelcamelcamel.com'; }
-      else if (/amazon\.es/.test(url)) { camelRegion = 'es'; camelBase = 'https://es.camelcamelcamel.com'; }
-      else if (/amazon\.it/.test(url)) { camelRegion = 'it'; camelBase = 'https://it.camelcamelcamel.com'; }
-      else if (/amazon\.co\.jp/.test(url)) { camelRegion = 'jp'; camelBase = 'https://jp.camelcamelcamel.com'; }
-
-      const chartUrl = `https://charts.camelcamelcamel.com/${camelRegion}/${currentASIN}/amazon.png?force=1&zero=0&w=500&h=200&desired=false&legend=1&ilt=1&tp=all&fo=0&lang=en`;
-      document.getElementById('price-chart').src = chartUrl;
-      document.getElementById('camel-link').href = `${camelBase}/product/${currentASIN}`;
-    });
+    renderPriceHistory();
   } else {
     priceHistory.style.display = 'none';
   }
@@ -484,6 +894,9 @@ async function toggleTheme() {
   document.documentElement.setAttribute('data-theme', next);
   document.getElementById('theme-toggle').textContent = next === 'dark' ? '🌙' : '☀️';
   await chrome.storage.local.set({ kp_theme: next });
+  if (currentASIN) {
+    renderPriceHistory();
+  }
 }
 
 // Compare
