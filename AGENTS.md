@@ -243,6 +243,7 @@ Two message actions:
 3. **Compare Mode**: Save up to 5 products, select 2 for side-by-side comparison with final verdict
 4. **Export**: Copy to clipboard or download `.txt` report
 5. **Premium gating pattern**: Premium features are always visible in the popup as preview cards. Non-premium users see locked overlays with upgrade CTAs instead of the features being hidden. Premium users see the same UI fully unlocked.
+6. **Logged-out CTA behavior**: Clicking a locked premium CTA while logged out starts the same Google sign-in flow as the main sign-in button, then continues into the Stripe upgrade flow after successful auth
 
 ## Free Tier Limits
 - 5 analyses per rolling 24-hour window (tracked by install ID for anonymous users, by user ID for logged-in free users)

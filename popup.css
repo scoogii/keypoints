@@ -96,7 +96,7 @@ button:active {
 
 .btn-google {
   width: 100%;
-  padding: 12px 16px;
+  padding: 10px 16px;
   font-size: 13px;
   font-weight: 600;
   color: #fff;
@@ -105,6 +105,10 @@ button:active {
   border-radius: 14px;
   cursor: pointer;
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
 }
 
 .btn-google:hover {
@@ -116,6 +120,23 @@ button:active {
 .btn-google:active {
   transform: scale(0.97);
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+
+.google-mark {
+  width: 30px;
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.google-mark svg {
+  width: 20px;
+  height: 20px;
+  display: block;
+  shape-rendering: geometricPrecision;
+  text-rendering: geometricPrecision;
 }
 
 /* ── Premium (Upgrade) ── */
@@ -479,8 +500,16 @@ button:active {
 .premium-feature-card-compact .premium-lock-overlay {
   left: 24px;
   right: 24px;
-  bottom: 24px;
+  top: 50%;
+  bottom: auto;
+  transform: translateY(-50%);
   padding: 14px 16px;
+  align-items: center;
+  text-align: center;
+}
+
+.premium-feature-card-compact .premium-lock-copy {
+  width: 100%;
 }
 
 .premium-feature-card-compact .btn-lock-cta {
@@ -726,19 +755,99 @@ button:active {
 
 /* ── Price History ── */
 
+.price-history-shell {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.price-history-header,
+.price-history-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.price-history-kicker {
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.46);
+  margin-bottom: 4px;
+}
+
+.price-history-status,
+.price-history-trend {
+  font-size: 12px;
+  line-height: 1.45;
+  color: #c9ccd6;
+}
+
+.price-history-badges {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.price-history-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 5px 8px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 600;
+  color: #cfd3dd;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.price-history-badge-accent {
+  color: #ffd89c;
+  background: rgba(255, 174, 66, 0.12);
+  border-color: rgba(255, 174, 66, 0.24);
+}
+
+.price-chart-frame {
+  position: relative;
+  border-radius: 14px;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at top left, rgba(255, 174, 66, 0.14), transparent 36%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0.015)),
+    #10131a;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
 .price-chart {
   width: 100%;
-  border-radius: 10px;
-  margin-bottom: 8px;
-  background: #1c1c24;
-  min-height: 180px;
-  object-fit: cover;
+  display: block;
+  min-height: 220px;
+}
+
+.price-chart-axis {
+  position: absolute;
+  inset: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  pointer-events: none;
+}
+
+.price-chart-axis span {
+  align-self: flex-end;
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.34);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
 }
 
 .camel-link {
   font-size: 11px;
   color: #007AFF;
   text-decoration: none;
+  white-space: nowrap;
 }
 
 .camel-link:hover {
@@ -1160,6 +1269,39 @@ button:active {
 [data-theme="light"] .btn-manage {
   color: #1d1d1f;
   border-color: rgba(0, 0, 0, 0.15);
+}
+
+[data-theme="light"] .price-history-kicker {
+  color: rgba(0, 0, 0, 0.42);
+}
+
+[data-theme="light"] .price-history-status,
+[data-theme="light"] .price-history-trend {
+  color: #4f5667;
+}
+
+[data-theme="light"] .price-history-badge {
+  color: #495161;
+  background: rgba(0, 0, 0, 0.04);
+  border-color: rgba(0, 0, 0, 0.08);
+}
+
+[data-theme="light"] .price-history-badge-accent {
+  color: #9b5a00;
+  background: rgba(255, 174, 66, 0.14);
+  border-color: rgba(255, 174, 66, 0.26);
+}
+
+[data-theme="light"] .price-chart-frame {
+  background:
+    radial-gradient(circle at top left, rgba(255, 174, 66, 0.12), transparent 36%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.7), rgba(245, 247, 250, 0.92)),
+    #f8f9fb;
+  border-color: rgba(0, 0, 0, 0.08);
+}
+
+[data-theme="light"] .price-chart-axis span {
+  color: rgba(0, 0, 0, 0.34);
 }
 
 [data-theme="light"] .remaining-badge {

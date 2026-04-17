@@ -42,10 +42,12 @@ async function handlePremiumGate(featureName) {
 
 async function startUpgradeFlow() {
   try {
-    const user = await getStoredUser();
+    let user = await getStoredUser();
     if (!user) {
-      showToast('Sign in with Google to start your subscription.', 'info');
-      return;
+      user = await login();
+      if (!user) {
+        return;
+      }
     }
 
     const tab = await getCurrentTab();
@@ -772,9 +774,12 @@ async function login() {
         updateRemainingBadge(remaining);
       }
     } catch {}
+
+    return user;
   } catch (err) {
     console.error('Login failed:', err);
     showToast('Google sign-in failed. Please try again.', 'error');
+    return null;
   }
 }
 

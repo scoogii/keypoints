@@ -14,7 +14,15 @@
     <div id="auth-section">
       <div id="logged-out">
         <button type="button" id="google-login" class="btn-google">
-          Sign in with Google
+          <span class="google-mark" aria-hidden="true">
+            <svg viewBox="0 0 18 18" focusable="false">
+              <path fill="#4285F4" d="M17.64 9.2045c0-.6382-.0573-1.2518-.1636-1.8409H9v3.4818h4.8436c-.2086 1.125-.8427 2.0782-1.7968 2.715v2.2582h2.9086C16.6582 14.2527 17.64 11.9455 17.64 9.2045z"/>
+              <path fill="#34A853" d="M9 18c2.43 0 4.4673-.8059 5.9564-2.1805l-2.9086-2.2582c-.8059.54-1.8373.8591-3.0477.8591-2.3441 0-4.3282-1.5841-5.0359-3.7105H.9573v2.3318C2.4382 15.9832 5.4818 18 9 18z"/>
+              <path fill="#FBBC05" d="M3.9641 10.7091c-.18-.54-.2823-1.1168-.2823-1.7091s.1023-1.1691.2823-1.7091V4.9591H.9573C.3477 6.1732 0 7.5505 0 9s.3477 2.8268.9573 4.0409l3.0068-2.3318z"/>
+              <path fill="#EA4335" d="M9 3.5795c1.3214 0 2.5077.4541 3.4405 1.3459l2.5814-2.5813C13.4632.8918 11.4259 0 9 0 5.4818 0 2.4382 2.0168.9573 4.9591l3.0068 2.3318C4.6718 5.1636 6.6559 3.5795 9 3.5795z"/>
+            </svg>
+          </span>
+          <span>Sign in with Google</span>
         </button>
       </div>
       <div id="logged-in" style="display:none;">
@@ -126,8 +134,29 @@
           <!-- Price History -->
           <div id="price-history" class="section premium-feature-card" data-feature="price-history">
             <h2>📈 Price History</h2>
-            <img id="price-chart" class="price-chart" alt="Price History Chart" />
-            <a id="camel-link" class="camel-link" target="_blank">View on CamelCamelCamel →</a>
+            <div class="price-history-shell">
+              <div class="price-history-header">
+                <div>
+                  <p class="price-history-kicker">CamelCamelCamel-based trend</p>
+                  <p id="price-history-status" class="price-history-status">Loading price history...</p>
+                </div>
+                <div class="price-history-badges">
+                  <span id="price-history-market" class="price-history-badge">Amazon</span>
+                  <span id="price-history-current" class="price-history-badge price-history-badge-accent">Checking price</span>
+                </div>
+              </div>
+              <div class="price-chart-frame">
+                <canvas id="price-chart" class="price-chart" width="500" height="220" aria-label="Price History Graph"></canvas>
+                <div class="price-chart-axis" aria-hidden="true">
+                  <span>Higher</span>
+                  <span>Lower</span>
+                </div>
+              </div>
+              <div class="price-history-footer">
+                <span id="price-history-trend" class="price-history-trend">Waiting for chart data...</span>
+                <a id="camel-link" class="camel-link" target="_blank" rel="noreferrer">View on CamelCamelCamel →</a>
+              </div>
+            </div>
             <div class="premium-lock-overlay" data-premium-lock="price-history">
               <div class="premium-lock-pill">🔒 Premium</div>
               <p class="premium-lock-copy">See whether today’s price looks like a deal or a trap.</p>
