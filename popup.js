@@ -325,32 +325,66 @@ function generateReport() {
   const date = new Date().toLocaleDateString('en-US', {
     year: 'numeric', month: 'long', day: 'numeric',
   });
+  const highlights = (data.categoryHighlights || []).slice(0, 3);
+  const bestFor = highlights.flatMap(cat => cat.points || []).slice(0, 3);
+  const watchOuts = (data.cons || []).slice(0, 3);
+  const topStrengths = (data.pros || []).slice(0, 4);
+  const suspiciousCount = (data.fakeReviewFlags || []).length;
 
-  let report = `Sift Report - ${currentProductName}\nGenerated: ${date}\n========================\n\n`;
-  report += `SENTIMENT: ${data.sentimentLabel} (${data.sentimentScore}%)\n\n`;
+  let verdict = 'Worth a closer look';
+  if (data.sentimentScore >= 80) verdict = 'Strong buy signal';
+  else if (data.sentimentScore >= 65) verdict = 'Promising option';
+  else if (data.sentimentScore >= 45) verdict = 'Mixed option';
+  else verdict = 'High-risk pick';
 
-  report += 'PROS:\n';
-  data.pros.forEach(p => { report += `• ${p.point}\n`; });
+  let report = `Sift Buying Brief - ${currentProductName}\nGenerated: ${date}\n========================\n\n`;
+  report += `VERDICT: ${verdict}\n`;
+  report += `SENTIMENT: ${data.sentimentLabel} (${data.sentimentScore}%)\n`;
+  if (currentASIN) report += `ASIN: ${currentASIN}\n`;
+  if (currentPrice) report += `PRICE: ${currentPrice}\n`;
+  report += '\n';
 
-  report += '\nCONS:\n';
-  data.cons.forEach(c => { report += `• ${c.point}\n`; });
+  if (data.summary) {
+    report += `SUMMARY\n${data.summary}\n\n`;
+  }
 
-  if (data.categoryHighlights && data.categoryHighlights.length > 0) {
-    report += '\nREVIEW HIGHLIGHTS:\n';
-    data.categoryHighlights.forEach(cat => {
-      report += `[${cat.category}]:\n`;
-      cat.points.forEach(p => { report += `  - ${p}\n`; });
+  if (bestFor.length > 0) {
+    report += 'BEST FOR\n';
+    bestFor.forEach(point => { report += `• ${point}\n`; });
+    report += '\n';
+  }
+
+  if (topStrengths.length > 0) {
+    report += 'TOP STRENGTHS\n';
+    topStrengths.forEach(item => { report += `• ${item.point}\n`; });
+    report += '\n';
+  }
+
+  if (watchOuts.length > 0) {
+    report += 'WATCH-OUTS\n';
+    watchOuts.forEach(item => { report += `• ${item.point}\n`; });
+    report += '\n';
+  }
+
+  if (highlights.length > 0) {
+    report += 'KEY REVIEW THEMES\n';
+    highlights.forEach(cat => {
+      report += `• ${cat.category}: ${cat.points.join('; ')}\n`;
+    });
+    report += '\n';
+  }
+
+  report += 'RISK SNAPSHOT\n';
+  if (suspiciousCount === 0) {
+    report += '• No suspicious reviews were flagged in this analysis.\n';
+  } else {
+    report += `• ${suspiciousCount} suspicious review${suspiciousCount === 1 ? '' : 's'} flagged.\n`;
+    data.fakeReviewFlags.slice(0, 3).forEach(flag => {
+      report += `• "${flag.reviewTitle}" - ${flag.reason} (${Math.round(flag.confidence * 100)}% confidence)\n`;
     });
   }
 
-  if (data.fakeReviewFlags && data.fakeReviewFlags.length > 0) {
-    report += '\nSUSPICIOUS REVIEWS:\n';
-    data.fakeReviewFlags.forEach(f => {
-      report += `"${f.reviewTitle}" - ${f.reason} (Confidence: ${Math.round(f.confidence * 100)}%)\n`;
-    });
-  }
-
-  return report;
+  return report.trim();
 }
 
 async function copyToClipboard() {
@@ -358,7 +392,7 @@ async function copyToClipboard() {
   if (!text) return;
   try {
     await navigator.clipboard.writeText(text);
-    showToast('Copied to clipboard!', 'success');
+    showToast('Buying brief copied!', 'success');
   } catch {
     showToast('Failed to copy to clipboard', 'error');
   }
@@ -371,12 +405,12 @@ function downloadReport() {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = `sift-${currentProductName.slice(0, 50).replace(/[^a-z0-9]/gi, '_')}.txt`;
+  a.download = `sift-buying-brief-${currentProductName.slice(0, 50).replace(/[^a-z0-9]/gi, '_')}.txt`;
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
-  showToast('Report downloaded!', 'success');
+  showToast('Buying brief downloaded!', 'success');
 }
 
 // Theme

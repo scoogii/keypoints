@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"math/rand/v2"
 	"os"
 	"strings"
@@ -33,22 +34,33 @@ func AnalyzeReviews(ctx context.Context, reviews []models.Review, productName st
 	sampled := sampleReviews(reviews, 50)
 	prompt := buildAnalyzePrompt(sampled, totalCount, productName, starDist)
 
-	geminiCtx, geminiCancel := context.WithTimeout(ctx, 30*time.Second)
-	defer geminiCancel()
-
 	temp := float32(0.3)
 	thinkingBudget := int32(0)
-	resp, err := client.Models.GenerateContent(geminiCtx, "gemini-2.5-flash",
-		[]*newgenai.Content{{Parts: []*newgenai.Part{{Text: prompt}}}},
-		&newgenai.GenerateContentConfig{
-			Temperature:  &temp,
-			ThinkingConfig: &newgenai.ThinkingConfig{
-				ThinkingBudget: &thinkingBudget,
-			},
+	config := &newgenai.GenerateContentConfig{
+		Temperature: &temp,
+		ThinkingConfig: &newgenai.ThinkingConfig{
+			ThinkingBudget: &thinkingBudget,
 		},
-	)
-	if err != nil {
-		return nil, fmt.Errorf("failed to generate content: %w", err)
+	}
+
+	modelCandidates := []string{"gemini-2.5-flash", "gemini-2.5-pro"}
+	var resp *newgenai.GenerateContentResponse
+	var genErr error
+
+	for i, modelName := range modelCandidates {
+		attemptCtx, cancel := context.WithTimeout(ctx, 45*time.Second)
+		resp, genErr = client.Models.GenerateContent(attemptCtx, modelName,
+			[]*newgenai.Content{{Parts: []*newgenai.Part{{Text: prompt}}}},
+			config,
+		)
+		cancel()
+		if genErr == nil {
+			break
+		}
+		if i == len(modelCandidates)-1 || !shouldFallbackAnalysisModel(genErr) {
+			return nil, fmt.Errorf("failed to generate content: %w", genErr)
+		}
+		log.Printf("Gemini analysis fallback: %s unavailable, retrying with %s: %v", modelName, modelCandidates[i+1], genErr)
 	}
 
 	respText := resp.Text()
@@ -61,6 +73,17 @@ func AnalyzeReviews(ctx context.Context, reviews []models.Review, productName st
 	}
 
 	return &result, nil
+}
+
+func shouldFallbackAnalysisModel(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "503") ||
+		strings.Contains(msg, "unavailable") ||
+		strings.Contains(msg, "high demand") ||
+		strings.Contains(msg, "resource exhausted")
 }
 
 func Chat(ctx context.Context, reviews []models.Review, productName string, productDetails models.ProductDetails, question string) (string, error) {
