@@ -8,18 +8,20 @@ body {
   width: 440px;
   min-height: 300px;
   height: auto;
+  max-height: 600px;
   font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Segoe UI', Roboto, sans-serif;
   font-size: 13px;
   color: #e0e0e0;
   background-color: #0a0a0f;
-  overflow: hidden;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
 .container {
   padding: 24px;
   background-color: #0a0a0f;
   border-radius: 16px;
-  overflow: hidden;
+  overflow: visible;
 }
 
 h1 {
@@ -419,6 +421,74 @@ button:active {
   margin-bottom: 8px;
 }
 
+.premium-feature-card {
+  position: relative;
+  overflow: hidden;
+}
+
+.premium-feature-card.is-locked > :not(.premium-lock-overlay) {
+  filter: grayscale(1);
+  opacity: 0.5;
+  pointer-events: none;
+  user-select: none;
+}
+
+.premium-feature-card.is-locked {
+  border-color: rgba(255, 255, 255, 0.08);
+  padding-bottom: 92px;
+}
+
+.premium-lock-overlay {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: 12px;
+  display: none;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 215, 0, 0.18);
+  background:
+    linear-gradient(135deg, rgba(22, 22, 28, 0.94), rgba(15, 15, 20, 0.94)),
+    radial-gradient(circle at top right, rgba(255, 215, 0, 0.12), transparent 48%);
+  backdrop-filter: blur(6px);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.28);
+}
+
+.premium-feature-card.is-locked .premium-lock-overlay {
+  display: flex;
+}
+
+.premium-lock-pill {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.9px;
+  text-transform: uppercase;
+  color: #1a1a1a;
+  background: linear-gradient(135deg, #FFD700 0%, #FFA500 100%);
+  padding: 5px 10px;
+  border-radius: 999px;
+}
+
+.premium-lock-copy {
+  flex: 1;
+  font-size: 12px;
+  line-height: 1.5;
+  color: #f4f4f6;
+  font-style: normal;
+  margin-bottom: 0;
+  max-width: none;
+}
+
+.btn-lock-cta {
+  width: auto;
+  min-width: 148px;
+  flex-shrink: 0;
+}
+
 /* ── Auth ── */
 
 #auth-section {
@@ -504,6 +574,15 @@ button:active {
 .chat-input-group {
   display: flex;
   gap: 8px;
+}
+
+#chat-section {
+  display: block;
+  min-height: 230px;
+}
+
+#chat-section .chat-messages {
+  min-height: 112px;
 }
 
 #chat-input {
@@ -628,6 +707,8 @@ button:active {
   border-radius: 10px;
   margin-bottom: 8px;
   background: #1c1c24;
+  min-height: 180px;
+  object-fit: cover;
 }
 
 .camel-link {
@@ -1014,6 +1095,17 @@ button:active {
 
 [data-theme="light"] .premium-note {
   color: #666;
+}
+
+[data-theme="light"] .premium-lock-overlay {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.94), rgba(245, 245, 247, 0.94)),
+    radial-gradient(circle at top right, rgba(255, 215, 0, 0.2), transparent 48%);
+  border-color: rgba(255, 215, 0, 0.26);
+}
+
+[data-theme="light"] .premium-lock-copy {
+  color: #1d1d1f;
 }
 
 [data-theme="light"] .toast:not(.error):not(.success):not(.info) {

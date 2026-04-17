@@ -6,6 +6,61 @@ let currentPrice = '';
 let currentImage = '';
 let lastAnalysis = null;
 
+function isPremiumUser(user) {
+  return Boolean(user && user.isPremium);
+}
+
+async function getStoredUser() {
+  const { kp_user } = await chrome.storage.local.get('kp_user');
+  return kp_user || null;
+}
+
+function setPremiumLockState(isPremium) {
+  document.querySelectorAll('.premium-feature-card').forEach(card => {
+    card.classList.toggle('is-locked', !isPremium);
+  });
+}
+
+function updatePremiumCallToActions(user) {
+  const ctaLabel = user ? 'Upgrade to Premium' : 'Sign In to Unlock';
+  document.querySelectorAll('[data-premium-cta]').forEach(button => {
+    button.textContent = ctaLabel;
+  });
+}
+
+function getPremiumUpsellMessage(user, featureName) {
+  if (!user) {
+    return `Sign in to unlock ${featureName} with Premium.`;
+  }
+  return `${featureName} is a Premium feature. Upgrade to unlock it.`;
+}
+
+async function handlePremiumGate(featureName) {
+  const user = await getStoredUser();
+  showToast(getPremiumUpsellMessage(user, featureName), 'info');
+}
+
+async function startUpgradeFlow() {
+  try {
+    const user = await getStoredUser();
+    if (!user) {
+      showToast('Sign in with Google to start your subscription.', 'info');
+      return;
+    }
+
+    const tab = await getCurrentTab();
+    const response = await apiRequest('/api/stripe/create-checkout', {
+      method: 'POST',
+      body: JSON.stringify({ returnUrl: tab.url }),
+    });
+    if (!response.ok) throw new Error('Failed to create checkout session');
+    const { url } = await response.json();
+    chrome.tabs.create({ url });
+  } catch (err) {
+    showToast('Error: ' + err.message, 'error');
+  }
+}
+
 function showToast(message, type = 'info') {
   const toast = document.getElementById('toast');
   toast.textContent = message;
@@ -263,10 +318,8 @@ async function analyzeReviews() {
       updateRemainingBadge(data.remainingAnalyses);
     }
 
-    const { kp_user } = await chrome.storage.local.get('kp_user');
-    if (kp_user && kp_user.isPremium) {
-      showPremiumFeatures();
-    }
+    const user = await getStoredUser();
+    showPremiumFeatures(isPremiumUser(user));
 
     // Cache results for this product
     const tabForCache = await getCurrentTab();
@@ -286,9 +339,10 @@ async function analyzeReviews() {
 
 // Premium Features
 
-function showPremiumFeatures() {
+function showPremiumFeatures(isPremium = false) {
   const premiumFeatures = document.getElementById('premium-features');
   premiumFeatures.style.display = 'block';
+  setPremiumLockState(isPremium);
 
   const priceHistory = document.getElementById('price-history');
   if (currentASIN) {
@@ -666,7 +720,9 @@ function updateAuthUI(user) {
     premiumNotLoggedIn.style.display = 'block';
     premiumFree.style.display = 'none';
     premiumActive.style.display = 'none';
-    chatSection.style.display = 'none';
+    chatSection.style.display = 'block';
+    setPremiumLockState(false);
+    updatePremiumCallToActions(null);
   } else if (!user.isPremium) {
     loggedOut.style.display = 'none';
     loggedIn.style.display = 'block';
@@ -674,7 +730,9 @@ function updateAuthUI(user) {
     premiumNotLoggedIn.style.display = 'none';
     premiumFree.style.display = 'block';
     premiumActive.style.display = 'none';
-    chatSection.style.display = 'none';
+    chatSection.style.display = 'block';
+    setPremiumLockState(false);
+    updatePremiumCallToActions(user);
   } else {
     loggedOut.style.display = 'none';
     loggedIn.style.display = 'block';
@@ -683,6 +741,8 @@ function updateAuthUI(user) {
     premiumFree.style.display = 'none';
     premiumActive.style.display = 'block';
     chatSection.style.display = 'block';
+    setPremiumLockState(true);
+    updatePremiumCallToActions(user);
   }
 }
 
@@ -810,6 +870,12 @@ async function restoreChatMessages() {
 }
 
 async function sendChatMessage() {
+  const user = await getStoredUser();
+  if (!isPremiumUser(user)) {
+    handlePremiumGate('AI chat');
+    return;
+  }
+
   const input = document.getElementById('chat-input');
   const question = input.value.trim();
   if (!question) return;
@@ -877,6 +943,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     updateAuthUI(null);
   }
 
+  setPremiumLockState(!kp_user ? false : isPremiumUser(kp_user));
+
   // Fetch remaining analyses for free tier
   try {
     const remainingRes = await apiRequest('/api/analyze/remaining');
@@ -914,10 +982,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     document.getElementById('product-name').textContent = currentProductName;
     renderResults(cached.analysis);
 
-    const { kp_user: cachedUser } = await chrome.storage.local.get('kp_user');
-    if (cachedUser && cachedUser.isPremium) {
-      showPremiumFeatures();
-    }
+    const cachedUser = await getStoredUser();
+    showPremiumFeatures(isPremiumUser(cachedUser));
 
     await restoreChatMessages();
   }
@@ -926,20 +992,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   document.getElementById('analyze').addEventListener('click', analyzeReviews);
 
   // Premium actions
-  document.getElementById('upgrade').addEventListener('click', async () => {
-    try {
-      const tab = await getCurrentTab();
-      const response = await apiRequest('/api/stripe/create-checkout', {
-        method: 'POST',
-        body: JSON.stringify({ returnUrl: tab.url }),
-      });
-      if (!response.ok) throw new Error('Failed to create checkout session');
-      const { url } = await response.json();
-      chrome.tabs.create({ url });
-    } catch (err) {
-      showToast('Error: ' + err.message, 'error');
-    }
-  });
+  document.getElementById('upgrade').addEventListener('click', startUpgradeFlow);
 
   document.getElementById('manage-subscription').addEventListener('click', async () => {
     try {
@@ -953,8 +1006,22 @@ document.addEventListener('DOMContentLoaded', async () => {
   });
 
   // Export
-  document.getElementById('copy-clipboard').addEventListener('click', copyToClipboard);
-  document.getElementById('download-report').addEventListener('click', downloadReport);
+  document.getElementById('copy-clipboard').addEventListener('click', async () => {
+    const user = await getStoredUser();
+    if (!isPremiumUser(user)) {
+      handlePremiumGate('Export');
+      return;
+    }
+    copyToClipboard();
+  });
+  document.getElementById('download-report').addEventListener('click', async () => {
+    const user = await getStoredUser();
+    if (!isPremiumUser(user)) {
+      handlePremiumGate('Export');
+      return;
+    }
+    downloadReport();
+  });
 
   // Re-analyze
   document.getElementById('reanalyze').addEventListener('click', () => {
@@ -967,8 +1034,22 @@ document.addEventListener('DOMContentLoaded', async () => {
   document.getElementById('theme-toggle').addEventListener('click', toggleTheme);
 
   // Compare
-  document.getElementById('save-comparison').addEventListener('click', saveForComparison);
-  document.getElementById('compare-products').addEventListener('click', showCompareView);
+  document.getElementById('save-comparison').addEventListener('click', async () => {
+    const user = await getStoredUser();
+    if (!isPremiumUser(user)) {
+      handlePremiumGate('Compare');
+      return;
+    }
+    saveForComparison();
+  });
+  document.getElementById('compare-products').addEventListener('click', async () => {
+    const user = await getStoredUser();
+    if (!isPremiumUser(user)) {
+      handlePremiumGate('Compare');
+      return;
+    }
+    showCompareView();
+  });
   document.getElementById('compare-back').addEventListener('click', hideCompareView);
   document.getElementById('run-compare').addEventListener('click', runComparison);
 
@@ -976,5 +1057,16 @@ document.addEventListener('DOMContentLoaded', async () => {
   document.getElementById('chat-send').addEventListener('click', sendChatMessage);
   document.getElementById('chat-input').addEventListener('keydown', (e) => {
     if (e.key === 'Enter') sendChatMessage();
+  });
+
+  document.querySelectorAll('[data-premium-cta]').forEach(button => {
+    button.addEventListener('click', startUpgradeFlow);
+  });
+
+  document.querySelectorAll('[data-premium-lock]').forEach(overlay => {
+    overlay.addEventListener('click', (e) => {
+      if (e.target.closest('[data-premium-cta]')) return;
+      startUpgradeFlow();
+    });
   });
 });

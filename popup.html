@@ -73,48 +73,68 @@
           <div id="fake-reviews"></div>
         </div>
 
-        <!-- Premium Features (shown after analysis for premium users) -->
-        <div id="premium-features" style="display:none;">
+        <!-- Premium Features -->
+        <div id="premium-features">
           <!-- Export -->
-          <div class="section">
+          <div class="section premium-feature-card" data-feature="export">
             <h2>📤 Export</h2>
             <p class="premium-note">Save a concise buying brief with the verdict, top strengths, watch-outs, and review risks.</p>
             <div class="export-buttons">
               <button type="button" id="copy-clipboard" class="btn-export">📋 Copy Brief</button>
               <button type="button" id="download-report" class="btn-export">📄 Download Brief</button>
             </div>
+            <div class="premium-lock-overlay" data-premium-lock="export">
+              <div class="premium-lock-pill">🔒 Premium</div>
+              <p class="premium-lock-copy">Export a ready-to-share buying brief in one click.</p>
+              <button type="button" class="btn-premium btn-lock-cta" data-premium-cta="export">Unlock Export</button>
+            </div>
           </div>
 
           <!-- Save for Comparison -->
-          <div class="section">
+          <div class="section premium-feature-card" data-feature="compare-save">
             <button type="button" id="save-comparison" class="btn-export">💾 Save for Comparison</button>
+            <div class="premium-lock-overlay" data-premium-lock="compare-save">
+              <div class="premium-lock-pill">🔒 Premium</div>
+              <p class="premium-lock-copy">Save products and build a side-by-side shortlist.</p>
+              <button type="button" class="btn-premium btn-lock-cta" data-premium-cta="compare-save">Unlock Compare</button>
+            </div>
           </div>
 
           <!-- Price History -->
-          <div id="price-history" class="section">
+          <div id="price-history" class="section premium-feature-card" data-feature="price-history">
             <h2>📈 Price History</h2>
             <img id="price-chart" class="price-chart" alt="Price History Chart" />
             <a id="camel-link" class="camel-link" target="_blank">View on CamelCamelCamel →</a>
+            <div class="premium-lock-overlay" data-premium-lock="price-history">
+              <div class="premium-lock-pill">🔒 Premium</div>
+              <p class="premium-lock-copy">See whether today’s price looks like a deal or a trap.</p>
+              <button type="button" class="btn-premium btn-lock-cta" data-premium-cta="price-history">Unlock Price History</button>
+            </div>
           </div>
         </div>
       </div>
 
       <!-- Chat Section (Premium) -->
-      <div id="chat-section" class="section" style="display:none;">
+      <div id="chat-section" class="section premium-feature-card">
         <h2>💬 Ask About This Product</h2>
         <div id="chat-messages" class="chat-messages"></div>
         <div class="chat-input-group">
           <input type="text" id="chat-input" placeholder="Ask a question about this product..." />
           <button type="button" id="chat-send" class="btn-send">Send</button>
         </div>
+        <div class="premium-lock-overlay" data-premium-lock="chat">
+          <div class="premium-lock-pill">🔒 Premium</div>
+          <p class="premium-lock-copy">Ask follow-up questions about specs, use cases, tradeoffs, and review patterns.</p>
+          <button type="button" class="btn-premium btn-lock-cta" data-premium-cta="chat">Unlock AI Chat</button>
+        </div>
       </div>
 
       <!-- Premium Section -->
       <div class="section premium-section">
         <h2>💎 Premium</h2>
-        <p class="premium-note">Compare products, export summaries, price history & AI chat</p>
+        <p class="premium-note">Compare products, export summaries, price history, and AI chat are always visible so shoppers know what’s available.</p>
         <div id="premium-not-logged-in">
-          <p class="premium-note">Sign in to upgrade</p>
+          <p class="premium-note">Sign in to unlock premium features and start a subscription.</p>
         </div>
         <div id="premium-free" style="display:none;">
           <button type="button" id="upgrade" class="btn-premium">Upgrade - $3.49/mo</button>

@@ -108,7 +108,7 @@ sift/
 6. Backend checks rate limit (5/24h rolling window by install ID for anonymous users and by user ID for logged-in free users; premium users are unlimited)
 7. Backend deep-scrapes Amazon review pages using headless Chrome (chromedp) with user's cookies for authentication, scraping reviews by star level in 5 parallel goroutines, clicking "Show more" buttons to load additional reviews. Falls back to on-page reviews if scraping fails
 8. Backend samples scraped reviews via stratified sampling (up to 50 reviews, proportional to star rating distribution) to keep Gemini prompts fast and cost-effective
-9. Backend sends sampled reviews to Gemini 2.5 Flash with thinking disabled (ThinkingBudget=0) and structured JSON prompt (temperature 0.3), noting the total review count vs sample size. If Flash returns a temporary capacity-style error (for example 503 / UNAVAILABLE / high demand), the backend retries the same prompt and options once with Gemini 2.5 Pro. Star distribution percentages are included so Gemini can calculate accurate sentiment scores
+9. Backend sends sampled reviews to Gemini 2.5 Flash with thinking disabled (ThinkingBudget=0) and structured JSON prompt (temperature 0.3), noting the total review count vs sample size. If Flash returns a temporary capacity-style error (for example 503 / UNAVAILABLE / high demand), the backend retries once with Gemini 2.5 Pro using the same prompt but default Pro thinking settings. Star distribution percentages are included so Gemini can calculate accurate sentiment scores
 10. Gemini returns analysis (summary, pros, cons, sentiment, fake flags, category highlights)
 11. Analysis logged to `analysis_logs` only after successful Gemini response
 12. Results rendered in popup, cached in `chrome.storage.local` (1hr expiry, keyed by ASIN)
@@ -198,7 +198,7 @@ Tables and index are auto-created in `services.InitDB()` with `CREATE TABLE IF N
 4. **`services/gemini.go → AnalyzeReviews`**: Orchestrates the Gemini call
    - **Stratified sampling** (`sampleReviews`): If more than 250 reviews are provided, groups reviews into buckets by star rating (1-5), then takes a proportional sample from each bucket (e.g., if 60% of reviews are 5-star, ~60% of the 250 sample will be 5-star). Each bucket is shuffled before sampling. Guarantees at least 1 review per non-empty bucket
    - **Prompt construction** (`buildAnalyzePrompt`): Builds a text prompt listing each sampled review with title, rating, verified status, and body. If sampling occurred, tells Gemini it's a "representative sample of N reviews (from M total)". Appends strict JSON schema and instructions for pros, cons, sentiment, fake review flags, and category highlights
-  - **Gemini call**: Uses `gemini-2.5-flash` model at temperature 0.3. If Flash is temporarily unavailable due to capacity/demand errors, retries once with `gemini-2.5-pro` using the same prompt and options
+  - **Gemini call**: Uses `gemini-2.5-flash` model at temperature 0.3 with `ThinkingBudget=0` for speed. If Flash is temporarily unavailable due to capacity/demand errors, retries once with `gemini-2.5-pro` using the same prompt but default Pro thinking settings
    - **Response parsing** (`extractJSON`): Strips any markdown code fences from Gemini's response, then unmarshals JSON into `AnalyzeResponse` struct
 5. **Logging**: On success, inserts a row into `analysis_logs` with IP, install ID, and optional user ID
 6. **Response**: Returns `AnalyzeResponse` JSON (pros, cons, sentimentScore, sentimentLabel, summary, fakeReviewFlags, categoryHighlights) plus `remainingAnalyses` count
@@ -217,7 +217,7 @@ Tables and index are auto-created in `services.InitDB()` with `CREATE TABLE IF N
 
 ### Gemini Prompt Details
 
-- **Analyze prompt** (temperature 0.3, thinking disabled): Uses new SDK (google.golang.org/genai) with ThinkingBudget=0 for speed. Primary model is `gemini-2.5-flash`; on temporary capacity-style failures it falls back once to `gemini-2.5-pro` with the same prompt/config. Requests structured JSON with pros (3-5), cons (3-5), sentiment score (calculated from star distribution formula), sentiment label, summary (product description + review consensus), fake review flags (max 3, confidence > 0.7), and category highlights (max 3-4). Has a `CRITICAL` anti-hallucination instruction
+- **Analyze prompt** (temperature 0.3, thinking disabled on Flash): Uses new SDK (google.golang.org/genai). Primary model is `gemini-2.5-flash` with `ThinkingBudget=0` for speed; on temporary capacity-style failures it falls back once to `gemini-2.5-pro` with the same prompt but default Pro thinking settings, because Pro rejects a zero thinking budget. Requests structured JSON with pros (3-5), cons (3-5), sentiment score (calculated from star distribution formula), sentiment label, summary (product description + review consensus), fake review flags (max 3, confidence > 0.7), and category highlights (max 3-4). Has a `CRITICAL` anti-hallucination instruction
 - **Chat prompt** (temperature 0.5): Includes full product information (price, rating, features, description, specs, manufacturer info) plus all reviews. Rules forbid making up information not in the provided data
 - **Fake review detection**: Entirely prompt-driven (no algorithmic detection). Gemini looks for generic/vague language, incentivized reviews, and identical phrasing. Only flags with > 0.7 confidence. Will not flag reviews just for being short or opinionated
 
@@ -242,6 +242,7 @@ Two message actions:
 2. **Price History**: CamelCamelCamel chart embedded via ASIN (supports US and AU domains)
 3. **Compare Mode**: Save up to 5 products, select 2 for side-by-side comparison with final verdict
 4. **Export**: Copy to clipboard or download `.txt` report
+5. **Premium gating pattern**: Premium features are always visible in the popup as preview cards. Non-premium users see locked overlays with upgrade CTAs instead of the features being hidden. Premium users see the same UI fully unlocked.
 
 ## Free Tier Limits
 - 5 analyses per rolling 24-hour window (tracked by install ID for anonymous users, by user ID for logged-in free users)
@@ -259,6 +260,7 @@ Two message actions:
 - Sentiment summary (1-3 sentence AI-generated overview below sentiment bar)
 - Apple-inspired design (SF Pro font stack, 14px border-radius cards, gradient buttons)
 - 440px popup width
+- Premium feature previews stay visible for all users; locked overlays and upgrade CTAs are used to drive subscription conversion
 
 ## Development & Production
 

@@ -34,20 +34,12 @@ func AnalyzeReviews(ctx context.Context, reviews []models.Review, productName st
 	sampled := sampleReviews(reviews, 50)
 	prompt := buildAnalyzePrompt(sampled, totalCount, productName, starDist)
 
-	temp := float32(0.3)
-	thinkingBudget := int32(0)
-	config := &newgenai.GenerateContentConfig{
-		Temperature: &temp,
-		ThinkingConfig: &newgenai.ThinkingConfig{
-			ThinkingBudget: &thinkingBudget,
-		},
-	}
-
 	modelCandidates := []string{"gemini-2.5-flash", "gemini-2.5-pro"}
 	var resp *newgenai.GenerateContentResponse
 	var genErr error
 
 	for i, modelName := range modelCandidates {
+		config := analysisGenerateConfigForModel(modelName)
 		attemptCtx, cancel := context.WithTimeout(ctx, 45*time.Second)
 		resp, genErr = client.Models.GenerateContent(attemptCtx, modelName,
 			[]*newgenai.Content{{Parts: []*newgenai.Part{{Text: prompt}}}},
@@ -73,6 +65,25 @@ func AnalyzeReviews(ctx context.Context, reviews []models.Review, productName st
 	}
 
 	return &result, nil
+}
+
+func analysisGenerateConfigForModel(modelName string) *newgenai.GenerateContentConfig {
+	temp := float32(0.3)
+	config := &newgenai.GenerateContentConfig{
+		Temperature: &temp,
+	}
+
+	// Flash supports disabling thinking for a fast first pass.
+	// Pro rejects a zero thinking budget, so the fallback must use its default
+	// thinking mode instead of reusing Flash's config.
+	if modelName == "gemini-2.5-flash" {
+		thinkingBudget := int32(0)
+		config.ThinkingConfig = &newgenai.ThinkingConfig{
+			ThinkingBudget: &thinkingBudget,
+		}
+	}
+
+	return config
 }
 
 func shouldFallbackAnalysisModel(err error) bool {
