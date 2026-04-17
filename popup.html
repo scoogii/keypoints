@@ -38,6 +38,27 @@
         <div id="remaining-badge" class="remaining-badge" style="display:none;"></div>
       </div>
 
+      <!-- Premium Section -->
+      <div class="section premium-section">
+        <div class="premium-section-header">
+          <span class="premium-lock-pill premium-section-pill">💎 Premium</span>
+        </div>
+        <p class="premium-note">Compare products, export summaries, price history, and AI chat are always visible so shoppers know what’s available.</p>
+        <div id="premium-not-logged-in">
+          <p class="premium-note">Sign in to unlock premium features and start a subscription.</p>
+        </div>
+        <div id="premium-free" style="display:none;">
+          <button type="button" id="upgrade" class="btn-premium">Upgrade - $3.49/mo</button>
+        </div>
+        <div id="premium-active" style="display:none;">
+          <p class="premium-badge">✅ Premium Active</p>
+          <div class="premium-active-buttons">
+            <button type="button" id="compare-products" class="btn-manage">Compare Products <span id="compare-count" class="compare-count"></span></button>
+            <button type="button" id="manage-subscription" class="btn-manage">Manage Subscription</button>
+          </div>
+        </div>
+      </div>
+
       <div id="loading" class="loading" style="display:none;">
         <div class="spinner"></div>
         <p id="loading-text">Analyzing reviews...</p>
@@ -76,7 +97,7 @@
         <!-- Premium Features -->
         <div id="premium-features">
           <!-- Export -->
-          <div class="section premium-feature-card" data-feature="export">
+          <div class="section premium-feature-card premium-feature-card-compact" data-feature="export">
             <h2>📤 Export</h2>
             <p class="premium-note">Save a concise buying brief with the verdict, top strengths, watch-outs, and review risks.</p>
             <div class="export-buttons">
@@ -91,8 +112,10 @@
           </div>
 
           <!-- Save for Comparison -->
-          <div class="section premium-feature-card" data-feature="compare-save">
-            <button type="button" id="save-comparison" class="btn-export">💾 Save for Comparison</button>
+          <div class="section premium-feature-card premium-feature-card-compact" data-feature="compare-save">
+            <h2>💾 Save for Comparison</h2>
+            <p class="premium-note">Build a shortlist as you analyze products so you can compare them side by side later.</p>
+            <button type="button" id="save-comparison" class="btn-export">Save This Product</button>
             <div class="premium-lock-overlay" data-premium-lock="compare-save">
               <div class="premium-lock-pill">🔒 Premium</div>
               <p class="premium-lock-copy">Save products and build a side-by-side shortlist.</p>
@@ -126,25 +149,6 @@
           <div class="premium-lock-pill">🔒 Premium</div>
           <p class="premium-lock-copy">Ask follow-up questions about specs, use cases, tradeoffs, and review patterns.</p>
           <button type="button" class="btn-premium btn-lock-cta" data-premium-cta="chat">Unlock AI Chat</button>
-        </div>
-      </div>
-
-      <!-- Premium Section -->
-      <div class="section premium-section">
-        <h2>💎 Premium</h2>
-        <p class="premium-note">Compare products, export summaries, price history, and AI chat are always visible so shoppers know what’s available.</p>
-        <div id="premium-not-logged-in">
-          <p class="premium-note">Sign in to unlock premium features and start a subscription.</p>
-        </div>
-        <div id="premium-free" style="display:none;">
-          <button type="button" id="upgrade" class="btn-premium">Upgrade - $3.49/mo</button>
-        </div>
-        <div id="premium-active" style="display:none;">
-          <p class="premium-badge">✅ Premium Active</p>
-          <div class="premium-active-buttons">
-            <button type="button" id="compare-products" class="btn-manage">Compare Products <span id="compare-count" class="compare-count"></span></button>
-            <button type="button" id="manage-subscription" class="btn-manage">Manage Subscription</button>
-          </div>
         </div>
       </div>
     </div>

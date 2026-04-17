@@ -407,6 +407,16 @@ button:active {
   margin-top: 12px;
 }
 
+.premium-section-header {
+  margin-bottom: 12px;
+}
+
+.premium-section-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
 .premium-note {
   font-size: 11px;
   color: #888;
@@ -426,40 +436,56 @@ button:active {
   overflow: hidden;
 }
 
+#premium-features .premium-feature-card {
+  min-height: 150px;
+}
+
 .premium-feature-card.is-locked > :not(.premium-lock-overlay) {
-  filter: grayscale(1);
-  opacity: 0.5;
+  filter: grayscale(1) saturate(0.2) brightness(0.72);
+  opacity: 0.35;
   pointer-events: none;
   user-select: none;
 }
 
 .premium-feature-card.is-locked {
   border-color: rgba(255, 255, 255, 0.08);
-  padding-bottom: 92px;
 }
 
 .premium-lock-overlay {
   position: absolute;
-  left: 12px;
-  right: 12px;
-  bottom: 12px;
+  left: 16px;
+  right: 16px;
+  bottom: 16px;
   display: none;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 12px 14px;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: flex-start;
+  gap: 10px;
+  padding: 16px 18px;
   border-radius: 14px;
   border: 1px solid rgba(255, 215, 0, 0.18);
   background:
-    linear-gradient(135deg, rgba(22, 22, 28, 0.94), rgba(15, 15, 20, 0.94)),
-    radial-gradient(circle at top right, rgba(255, 215, 0, 0.12), transparent 48%);
-  backdrop-filter: blur(6px);
-  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.28);
+    linear-gradient(135deg, rgba(22, 22, 28, 0.78), rgba(15, 15, 20, 0.76)),
+    radial-gradient(circle at top right, rgba(255, 215, 0, 0.08), transparent 48%);
+  backdrop-filter: blur(4px);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.18);
+  z-index: 2;
 }
 
 .premium-feature-card.is-locked .premium-lock-overlay {
   display: flex;
+}
+
+.premium-feature-card-compact .premium-lock-overlay {
+  left: 24px;
+  right: 24px;
+  bottom: 24px;
+  padding: 14px 16px;
+}
+
+.premium-feature-card-compact .btn-lock-cta {
+  width: 100%;
+  min-width: 0;
 }
 
 .premium-lock-pill {
@@ -474,7 +500,6 @@ button:active {
 }
 
 .premium-lock-copy {
-  flex: 1;
   font-size: 12px;
   line-height: 1.5;
   color: #f4f4f6;
@@ -484,9 +509,8 @@ button:active {
 }
 
 .btn-lock-cta {
-  width: auto;
-  min-width: 148px;
-  flex-shrink: 0;
+  width: 100%;
+  min-width: 0;
 }
 
 /* ── Auth ── */
@@ -1099,8 +1123,8 @@ button:active {
 
 [data-theme="light"] .premium-lock-overlay {
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.94), rgba(245, 245, 247, 0.94)),
-    radial-gradient(circle at top right, rgba(255, 215, 0, 0.2), transparent 48%);
+    linear-gradient(180deg, rgba(255, 255, 255, 0.8), rgba(245, 245, 247, 0.78)),
+    radial-gradient(circle at top right, rgba(255, 215, 0, 0.14), transparent 48%);
   border-color: rgba(255, 215, 0, 0.26);
 }
 
